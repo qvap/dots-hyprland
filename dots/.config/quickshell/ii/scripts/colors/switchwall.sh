@@ -111,8 +111,8 @@ is_video() {
     [[ "$extension" == "mp4" || "$extension" == "webm" || "$extension" == "mkv" || "$extension" == "avi" || "$extension" == "mov" ]] && return 0 || return 1
 }
 
-kill_existing_mpvpaper() {
-    pkill -f -9 mpvpaper || true
+kill_existing_video_backend() {
+    pkill -f -9 phonto || true
 }
 
 create_restore_script() {
@@ -193,7 +193,7 @@ switch() {
         fi
 
         check_and_prompt_upscale "$imgpath" &
-        kill_existing_mpvpaper
+        kill_existing_video_backend
 
         if is_video "$imgpath"; then
             mkdir -p "$THUMBNAIL_DIR"
