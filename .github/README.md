@@ -109,7 +109,7 @@ Widget system: Quickshell | Support: Yes
     <h3></h3>
 </div>
 
- - [@end-4](https://github.com/end_4) for making this beautiful dotfiles :)
+ - [@end-4](https://github.com/end-4) for making this beautiful dotfiles :)
 
 ---
 
