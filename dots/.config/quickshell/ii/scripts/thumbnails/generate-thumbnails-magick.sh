@@ -29,28 +29,18 @@ md5() {
 }
 
 urlencode() {
-    # Percent-encode a string for use in a URI, but do not encode slashes
-    local str="$1"
-    local encoded=""
-    local c
-    for ((i=0; i<${#str}; i++)); do
-        c="${str:$i:1}"
-        case "$c" in
-            [a-zA-Z0-9.~_-]|/|'('|')'|'*') encoded+="$c" ;;
-            *) printf -v hex '%%%02X' "'${c}'"; encoded+="$hex" ;;
-        esac
-    done
-    echo "$encoded"
+    python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe='~_.-/()\'*!'))" "$1"
 }
 
 generate_thumbnail() {
     local src="$1"
     local abs_path
     abs_path="$(realpath "$src")"
-    # Skip files with multiple frames (GIFs, videos, etc.)
+    # Skip files with multiple frames (GIFs, videos, etc.) by extracting only the first frame
+    local frame_suffix=""
     case "${abs_path,,}" in
         *.gif|*.mp4|*.webm|*.mkv|*.avi|*.mov)
-            return
+            frame_suffix="[0]"
             ;;
     esac
     local encoded_path
@@ -64,7 +54,7 @@ generate_thumbnail() {
     if [ -f "$out" ]; then
         return
     fi
-    magick "$abs_path" -resize "${THUMBNAIL_SIZE}x${THUMBNAIL_SIZE}" "$out"
+    magick "${abs_path}${frame_suffix}" -resize "${THUMBNAIL_SIZE}x${THUMBNAIL_SIZE}" "$out"
 }
 
 # Parse arguments
