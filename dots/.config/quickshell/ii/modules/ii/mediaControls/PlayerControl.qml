@@ -55,31 +55,31 @@ Item { // Player instance
         interval: Config.options.resources.updateInterval
         repeat: true
         onTriggered: {
-            root.player.positionChanged()
+            root.player.positionChanged();
         }
     }
 
     onArtFilePathChanged: {
         if (root.artUrl.length == 0) {
-            root.artDominantColor = Appearance.m3colors.m3secondaryContainer
+            root.artDominantColor = Appearance.m3colors.m3secondaryContainer;
             return;
         }
 
         // Binding does not work in Process
-        coverArtDownloader.targetFile = root.artUrl 
-        coverArtDownloader.artFilePath = root.artFilePath
+        coverArtDownloader.targetFile = root.artUrl;
+        coverArtDownloader.artFilePath = root.artFilePath;
         // Download
-        root.downloaded = false
-        coverArtDownloader.running = true
+        root.downloaded = false;
+        coverArtDownloader.running = true;
     }
 
     Process { // Cover art downloader
         id: coverArtDownloader
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
-        command: [ "bash", "-c", `[ -f ${artFilePath} ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}'` ]
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}'`]
         onExited: (exitCode, exitStatus) => {
-            root.downloaded = true
+            root.downloaded = true;
         }
     }
 
@@ -206,10 +206,13 @@ Item { // Player instance
                     animationDistanceX: 6
                     animationDistanceY: 0
                 }
-                Item { Layout.fillHeight: true }
                 Item {
+                    Layout.fillHeight: true
+                }
+                Item {
+                    id: bottomControlsContainer
                     Layout.fillWidth: true
-                    implicitHeight: trackTime.implicitHeight + sliderRow.implicitHeight
+                    implicitHeight: trackTime.implicitHeight + sliderRow.implicitHeight + volumeRow.implicitHeight + 10
 
                     StyledText {
                         id: trackTime
@@ -224,7 +227,8 @@ Item { // Player instance
                     RowLayout {
                         id: sliderRow
                         anchors {
-                            bottom: parent.bottom
+                            bottom: volumeRow.top
+                            bottomMargin: 5
                             left: parent.left
                             right: parent.right
                         }
@@ -241,7 +245,7 @@ Item { // Player instance
                                 id: sliderLoader
                                 anchors.fill: parent
                                 active: root.player?.canSeek ?? false
-                                sourceComponent: StyledSlider { 
+                                sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
@@ -261,19 +265,46 @@ Item { // Player instance
                                     right: parent.right
                                 }
                                 active: !(root.player?.canSeek ?? false)
-                                sourceComponent: StyledProgressBar { 
+                                sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     value: root.player?.position / root.player?.length
                                 }
                             }
-
-                            
                         }
                         TrackChangeButton {
                             iconName: "skip_next"
                             downAction: () => root.player?.next()
+                        }
+                    }
+
+                    RowLayout {
+                        id: volumeRow
+                        anchors {
+                            bottom: parent.bottom
+                            left: parent.left
+                            right: parent.right
+                        }
+                        spacing: 15
+
+                        MaterialSymbol {
+                            iconSize: Appearance.font.pixelSize.hugeass
+                            color: blendedColors.colSubtext
+                            text: (root.player?.volume ?? 0) === 0 ? "volume_off" : ((root.player?.volume ?? 0) < 0.5 ? "volume_down" : "volume_up")
+                        }
+
+                        StyledSlider {
+                            Layout.fillWidth: true
+                            configuration: StyledSlider.Configuration.XS
+                            highlightColor: blendedColors.colPrimary
+                            trackColor: blendedColors.colSecondaryContainer
+                            handleColor: blendedColors.colPrimary
+                            value: root.player?.volume ?? 0
+                            onMoved: {
+                                if (root.player)
+                                    root.player.volume = value;
+                            }
                         }
                     }
 
@@ -285,7 +316,7 @@ Item { // Player instance
                         property real size: 44
                         implicitWidth: size
                         implicitHeight: size
-                        downAction: () => root.player.togglePlaying();
+                        downAction: () => root.player.togglePlaying()
 
                         buttonRadius: root.player?.isPlaying ? Appearance?.rounding.normal : size / 2
                         colBackground: root.player?.isPlaying ? blendedColors.colPrimary : blendedColors.colSecondaryContainer
