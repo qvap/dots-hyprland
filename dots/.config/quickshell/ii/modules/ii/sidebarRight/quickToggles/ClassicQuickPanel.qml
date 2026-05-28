@@ -25,6 +25,11 @@ AbstractQuickPanel {
                 root.openWifiDialog();
             }
         }
+        VirtualPrivateNetworkToggle {
+            altAction: () => {
+                root.openVpnDialog();
+            }
+        }
         BluetoothToggle {
             altAction: () => {
                 root.openBluetoothDialog();

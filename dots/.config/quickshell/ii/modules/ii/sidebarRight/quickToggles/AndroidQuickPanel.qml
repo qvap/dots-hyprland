@@ -23,19 +23,24 @@ AbstractQuickPanel {
     readonly property real baseCellWidth: {
         // This is the wrong calculation, but it looks correct in reality???
         // (theoretically spacing should be multiplied by 1 column less)
-        const availableWidth = root.width - (root.padding * 2) - (root.spacing * (root.columns))
-        return availableWidth / root.columns
+        const availableWidth = root.width - (root.padding * 2) - (root.spacing * (root.columns));
+        return availableWidth / root.columns;
     }
     readonly property real baseCellHeight: 56
 
     // Toggles
-    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "colorPicker", "onScreenKeyboard", "mic", "audio", "notifications", "powerProfile","musicRecognition", "antiFlashbang"]
+    readonly property list<string> availableToggleTypes: ["network", "bluetooth", "idleInhibitor", "easyEffects", "nightLight", "darkMode", "cloudflareWarp", "gameMode", "screenSnip", "colorPicker", "onScreenKeyboard", "mic", "audio", "notifications", "powerProfile", "musicRecognition", "antiFlashbang", "vpn"]
     readonly property int columns: Config.options.sidebar.quickToggles.android.columns
     readonly property list<var> toggles: Config.ready ? Config.options.sidebar.quickToggles.android.toggles : []
     readonly property list<var> toggleRows: toggleRowsForList(toggles)
     readonly property list<var> unusedToggles: {
-        const types = availableToggleTypes.filter(type => !toggles.some(toggle => (toggle && toggle.type === type)))
-        return types.map(type => { return { type: type, size: 1 } })
+        const types = availableToggleTypes.filter(type => !toggles.some(toggle => (toggle && toggle.type === type)));
+        return types.map(type => {
+            return {
+                type: type,
+                size: 1
+            };
+        });
     }
     readonly property list<var> unusedToggleRows: toggleRowsForList(unusedToggles)
 
@@ -44,7 +49,8 @@ AbstractQuickPanel {
         var row = [];
         var totalSize = 0; // Total cols taken in current row
         for (var i = 0; i < togglesList.length; i++) {
-            if (!togglesList[i]) continue;
+            if (!togglesList[i])
+                continue;
             if (totalSize + togglesList[i].size > columns) {
                 rows.push(row);
                 row = [];
@@ -66,7 +72,7 @@ AbstractQuickPanel {
             margins: root.padding
         }
         spacing: 12
-        
+
         Column {
             id: usedRows
             spacing: root.spacing
@@ -106,6 +112,7 @@ AbstractQuickPanel {
                             onOpenBluetoothDialog: root.openBluetoothDialog()
                             onOpenNightLightDialog: root.openNightLightDialog()
                             onOpenWifiDialog: root.openWifiDialog()
+                            onOpenVpnDialog: root.openVpnDialog()
                         }
                     }
                 }
