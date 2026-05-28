@@ -60,7 +60,7 @@ vpn() {
     esac
 
     if [[ $needs_root -eq 1 && $EUID -ne 0 ]]; then
-        exec pkexec bash "${BASH_SOURCE[0]}" "$@"
+        exec pkexec "${BASH_SOURCE[0]}" "$@"
     fi
 
     if [[ $EUID -eq 0 ]]; then
@@ -108,14 +108,14 @@ vpn() {
             local state active_name
             state=$(systemctl is-active sing-box 2>/dev/null)
             active_name=$(_active_name)
-            
+
             if [[ "$state" == "active" ]]; then
                 # Check internet connectivity through the VPN proxy
                 if ! curl -s -o /dev/null -m 2 http://cp.cloudflare.com/generate_204; then
                     state="connecting"
                 fi
             fi
-            
+
             echo "STATUS:${state}"
             echo "PROFILE:${active_name}"
             ;;

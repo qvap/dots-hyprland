@@ -44,27 +44,91 @@ WindowDialog {
             Layout.fillWidth: true
             implicitHeight: vpnCookie.implicitHeight
 
-            MaterialCookie {
+            Item {
                 id: vpnCookie
                 anchors.centerIn: parent
-                implicitSize: 120
-                sides: 7
-                transformOrigin: Item.Center
-                rotation: 0
+                implicitWidth: 120
+                implicitHeight: 120
+                rotation: continuousRotation + leapRotation
 
-                color: (Vpn.status === "active" || Vpn.status === "connecting") ? (vpnMouseArea.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer) : (vpnMouseArea.containsMouse ? Appearance.colors.colLayer3Hover : ColorUtils.transparentize(Appearance.colors.colLayer3))
+                property bool loading: Vpn.status === "connecting"
+                property double baseShapeSize: 120
+                property double leapZoomSize: 120 * 1.2
+                property double leapZoomProgress: 0
 
-                RotationAnimation on rotation {
-                    running: Vpn.status === "active" || Vpn.status === "connecting"
-                    duration: 14000
-                    loops: Animation.Infinite
+                property list<var> shapes: [MaterialShape.Shape.SoftBurst, MaterialShape.Shape.Cookie9Sided, MaterialShape.Shape.Pentagon, MaterialShape.Shape.Pill, MaterialShape.Shape.Sunny, MaterialShape.Shape.Cookie4Sided, MaterialShape.Shape.Oval,]
+                property int shapeIndex: 1
+                property double continuousRotation: 0
+                property double leapRotation: 0
+
+                onLoadingChanged: {
+                    if (!loading) {
+                        leapAnimation.stop();
+                        leapRotation = 0;
+                        leapZoomProgress = 0;
+                        shapeIndex = 1; // Возвращаем к Cookie9Sided
+                    }
+                }
+
+                RotationAnimation on continuousRotation {
+                    running: vpnCookie.loading || Vpn.status === "active"
+                    duration: 12000
                     easing.type: Easing.Linear
+                    loops: Animation.Infinite
                     from: 0
                     to: 360
                 }
+                Timer {
+                    interval: 800
+                    running: vpnCookie.loading
+                    repeat: true
+                    onTriggered: leapAnimation.start()
+                }
+                ParallelAnimation {
+                    id: leapAnimation
+                    PropertyAction {
+                        target: vpnCookie
+                        property: "shapeIndex"
+                        value: (vpnCookie.shapeIndex + 1) % vpnCookie.shapes.length
+                    }
+                    RotationAnimation {
+                        target: vpnCookie
+                        direction: RotationAnimation.Shortest
+                        property: "leapRotation"
+                        to: (vpnCookie.leapRotation + 90) % 360
+                        duration: 350
+                        easing.type: Easing.InOutQuad
+                    }
+                    NumberAnimation {
+                        target: vpnCookie
+                        property: "leapZoomProgress"
+                        from: 0
+                        to: 1
+                        duration: 750
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.standard
+                    }
+                }
 
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                MaterialShape {
+                    id: shape
+                    anchors.centerIn: parent
+                    shape: vpnCookie.loading ? vpnCookie.shapes[vpnCookie.shapeIndex] : MaterialShape.Shape.Cookie9Sided
+                    implicitSize: {
+                        if (!vpnCookie.loading)
+                            return vpnCookie.baseShapeSize;
+                        const leapZoomDiff = vpnCookie.leapZoomSize - vpnCookie.baseShapeSize;
+                        const progressFirstHalf = Math.min(vpnCookie.leapZoomProgress, 0.5) * 2;
+                        const progressSecondHalf = Math.max(vpnCookie.leapZoomProgress - 0.5, 0) * 2;
+                        return vpnCookie.baseShapeSize + leapZoomDiff * progressFirstHalf - leapZoomDiff * progressSecondHalf;
+                    }
+                    color: (Vpn.status === "active" || Vpn.status === "connecting") ? (vpnMouseArea.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer) : (vpnMouseArea.containsMouse ? Appearance.colors.colLayer3Hover : ColorUtils.transparentize(Appearance.colors.colLayer3))
+
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(shape)
+                    }
+
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
             }
 
@@ -122,7 +186,6 @@ WindowDialog {
             if (profile && !profile.isActive) {
                 const profileIndex = profile.index !== undefined ? profile.index : index;
                 Vpn.selectProfile(profileIndex);
-                root.dismiss();
             }
         }
     }
@@ -156,7 +219,6 @@ WindowDialog {
             buttonText: Translation.tr("Update subscription")
             onClicked: {
                 Vpn.updateSubscription();
-                root.dismiss();
             }
         }
 
