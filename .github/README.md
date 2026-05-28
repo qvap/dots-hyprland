@@ -109,7 +109,7 @@ Widget system: Quickshell | Support: Yes
     <h3></h3>
 </div>
 
- - [@end_4](https://github.com/end_4) for making this beautiful dotfiles :)
+ - [@end-4](https://github.com/end_4) for making this beautiful dotfiles :)
 
 ---
 
@@ -118,5 +118,5 @@ Widget system: Quickshell | Support: Yes
     <h3></h3>
 </div>
 
- - Inspiration: osu!lazer (Hybrid), Windows 11 (Windoes), AvdanOS (NovelKnock), Material Design 3 (m3ww & later)
+ - Inspiration: Material Design 3
  - Copying: Absolutely, feel free. Just follow the license and it's all good
