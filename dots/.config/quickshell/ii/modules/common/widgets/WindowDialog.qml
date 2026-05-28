@@ -85,6 +85,7 @@ Rectangle {
                     top: parent.top
                     margins: dialogBackground.radius
                 }
+                height: root.backgroundHeight - dialogBackground.radius * 2
                 spacing: 16
                 opacity: root.show ? 1 : 0
                 Behavior on opacity {
