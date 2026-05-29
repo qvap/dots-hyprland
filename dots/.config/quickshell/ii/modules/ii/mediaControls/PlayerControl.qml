@@ -97,6 +97,7 @@ Item { // Player instance
     StyledRectangularShadow {
         target: background
     }
+
     Rectangle { // Background
         id: background
         anchors.fill: parent
@@ -178,6 +179,63 @@ Item { // Player instance
                     width: size
                     height: size
                 }
+
+                HoverHandler {
+                    id: artHover
+                }
+
+                Rectangle { // darkens art when hovered
+                    anchors.fill: parent
+                    color: "black"
+                    opacity: artHover.hovered ? 0.6 : 0.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animationCurves.expressiveFastSpatialDuration
+                            easing.bezierCurve: Appearance.animationCurves.standard
+                        }
+                    }
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    iconSize: Appearance.font.pixelSize.headline
+                    color: blendedColors.colOnLayer0
+                    text: (root.player?.volume ?? 0) === 0 ? "volume_off" : ((root.player?.volume ?? 0) < 0.5 ? "volume_down" : "volume_up")
+
+                    opacity: artHover.hovered ? 1.0 : 0.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animationCurves.expressiveFastSpatialDuration
+                            easing.bezierCurve: Appearance.animationCurves.standard
+                        }
+                    }
+                }
+
+                MaterialDial {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    colPrimary: blendedColors.colPrimary
+                    colSecondary: blendedColors.colSecondaryContainer
+                    value: root.player?.volume ?? 0
+
+                    waveAmplitude: 3.2 * root.player?.volume
+
+                    opacity: artHover.hovered ? 1.0 : 0.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animationCurves.expressiveFastSpatialDuration
+                            easing.bezierCurve: Appearance.animationCurves.standard
+                        }
+                    }
+
+                    onMoved: {
+                        if (root.player)
+                            root.player.volume = value;
+                    }
+                }
             }
 
             ColumnLayout { // Info & controls
@@ -195,6 +253,7 @@ Item { // Player instance
                     animationDistanceX: 6
                     animationDistanceY: 0
                 }
+
                 StyledText {
                     id: trackArtist
                     Layout.fillWidth: true
@@ -206,13 +265,15 @@ Item { // Player instance
                     animationDistanceX: 6
                     animationDistanceY: 0
                 }
+
                 Item {
                     Layout.fillHeight: true
                 }
+
                 Item {
                     id: bottomControlsContainer
                     Layout.fillWidth: true
-                    implicitHeight: trackTime.implicitHeight + sliderRow.implicitHeight + volumeRow.implicitHeight + 10
+                    implicitHeight: trackTime.implicitHeight + sliderRow.implicitHeight + 5
 
                     StyledText {
                         id: trackTime
@@ -224,11 +285,11 @@ Item { // Player instance
                         elide: Text.ElideRight
                         text: `${StringUtils.friendlyTimeForSeconds(root.player?.position)} / ${StringUtils.friendlyTimeForSeconds(root.player?.length)}`
                     }
+
                     RowLayout {
                         id: sliderRow
                         anchors {
-                            bottom: volumeRow.top
-                            bottomMargin: 5
+                            bottom: parent.bottom
                             left: parent.left
                             right: parent.right
                         }
@@ -276,35 +337,6 @@ Item { // Player instance
                         TrackChangeButton {
                             iconName: "skip_next"
                             downAction: () => root.player?.next()
-                        }
-                    }
-
-                    RowLayout {
-                        id: volumeRow
-                        anchors {
-                            bottom: parent.bottom
-                            left: parent.left
-                            right: parent.right
-                        }
-                        spacing: 15
-
-                        MaterialSymbol {
-                            iconSize: Appearance.font.pixelSize.hugeass
-                            color: blendedColors.colSubtext
-                            text: (root.player?.volume ?? 0) === 0 ? "volume_off" : ((root.player?.volume ?? 0) < 0.5 ? "volume_down" : "volume_up")
-                        }
-
-                        StyledSlider {
-                            Layout.fillWidth: true
-                            configuration: StyledSlider.Configuration.XS
-                            highlightColor: blendedColors.colPrimary
-                            trackColor: blendedColors.colSecondaryContainer
-                            handleColor: blendedColors.colPrimary
-                            value: root.player?.volume ?? 0
-                            onMoved: {
-                                if (root.player)
-                                    root.player.volume = value;
-                            }
                         }
                     }
 
