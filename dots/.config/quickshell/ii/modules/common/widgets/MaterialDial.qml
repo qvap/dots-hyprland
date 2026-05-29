@@ -22,9 +22,9 @@ Dial {
     property real waveFrequency: (2 * Math.PI * bg.arcRadius) / waveLength
     property real wavePhase: 0
 
-    property bool enableAnimation: !control.pressed
-    property int animationDuration: 800
-    property var easingType: Easing.OutCubic
+    stepSize: 0.05 // i like it more precise
+
+    property bool enableAnimation: !pressed
 
     inputMode: Dial.Horizontal
 
@@ -34,6 +34,23 @@ Dial {
         duration: 2000
         loops: Animation.Infinite
         running: true
+    }
+
+    MouseArea {
+        anchors.fill: parent
+
+        acceptedButtons: Qt.NoButton
+
+        onWheel: wheel => {
+            if (wheel.angleDelta.y > 0) {
+                control.increase();
+            } else {
+                control.decrease();
+            }
+            control.moved();
+
+            wheel.accepted = true;
+        }
     }
 
     implicitWidth: implicitSize
@@ -52,8 +69,9 @@ Dial {
         Behavior on degree {
             enabled: control.enableAnimation
             NumberAnimation {
-                duration: control.animationDuration
-                easing.type: control.easingType
+                duration: Appearance.animationCurves.expressiveFastSpatialDuration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
             }
         }
 

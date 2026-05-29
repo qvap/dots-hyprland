@@ -192,6 +192,7 @@ Item { // Player instance
                     Behavior on opacity {
                         NumberAnimation {
                             duration: Appearance.animationCurves.expressiveFastSpatialDuration
+                            easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.standard
                         }
                     }
@@ -208,6 +209,7 @@ Item { // Player instance
                     Behavior on opacity {
                         NumberAnimation {
                             duration: Appearance.animationCurves.expressiveFastSpatialDuration
+                            easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.standard
                         }
                     }
@@ -227,6 +229,7 @@ Item { // Player instance
                     Behavior on opacity {
                         NumberAnimation {
                             duration: Appearance.animationCurves.expressiveFastSpatialDuration
+                            easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.standard
                         }
                     }
