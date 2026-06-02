@@ -21,6 +21,7 @@ QtObject {
     property string speedResult: ""
     property bool isSpeedtesting: false
     property string scriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/vpn/virtualprivatenetwork.sh`
+
     property Timer refreshTimer
     property Process statusProc
     property Process profilesProc
@@ -33,14 +34,16 @@ QtObject {
     property Process speedtestProc
 
     function testSpeed() {
-        if (isSpeedtesting) return;
+        if (isSpeedtesting)
+            return;
         speedResult = "";
         isSpeedtesting = true;
         speedtestProc.running = true;
     }
 
     function testPing() {
-        if (isPinging) return;
+        if (isPinging)
+            return;
         pingResult = "";
         isPinging = true;
         pingProc.running = true;
@@ -112,9 +115,9 @@ QtObject {
         onExited: (exitCode, exitStatus) => {
             root.refresh();
             if (exitCode === 0)
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Profile changed")]);
+                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Node changed")]);
             else
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Failed to change profile")]);
+                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Failed to change node")]);
         }
     }
 
@@ -220,8 +223,10 @@ QtObject {
                     let down = "0", up = "0";
                     for (let i = 0; i < lines.length; i++) {
                         let line = lines[i].trim();
-                        if (line.startsWith("Download:")) down = line.substring(9).replace("Mbit/s", "Mb/s").trim();
-                        if (line.startsWith("Upload:")) up = line.substring(7).replace("Mbit/s", "Mb/s").trim();
+                        if (line.startsWith("Download:"))
+                            down = line.substring(9).replace("Mbit/s", "Mb/s").trim();
+                        if (line.startsWith("Upload:"))
+                            up = line.substring(7).replace("Mbit/s", "Mb/s").trim();
                     }
                     if (down === "0" && up === "0") {
                         root.speedResult = Translation.tr("Error");

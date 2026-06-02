@@ -163,7 +163,7 @@ WindowDialog {
         }
     }
 
-    // Profiles list
+    // Profiles (Nodes) list
     StyledComboBox {
         id: profileSelector
         Layout.fillHeight: false
