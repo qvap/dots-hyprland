@@ -158,11 +158,12 @@ QtObject {
                     const line = lines[i];
                     if (line.startsWith("PROFILE_ITEM:") || line.startsWith("PROFILE_ACTIVE:")) {
                         const parts = line.split(':');
-                        if (parts.length >= 3)
+                        if (parts.length >= 4)
                             _profiles.push({
                                 "isActive": parts[0] === "PROFILE_ACTIVE",
                                 "index": parseInt(parts[1]),
-                                "name": parts.slice(2).join(':').trim()
+                                "type": parts[2].trim(),
+                                "name": parts.slice(3).join(':').trim()
                             });
                     }
                 }
@@ -194,15 +195,20 @@ QtObject {
     }
 
     pingProc: Process {
-        command: ["bash", "-c", "curl -s -o /dev/null -w '%{time_total}' -m 5 http://cp.cloudflare.com/generate_204 || echo 'ERR'"]
+        command: ["bash", root.scriptPath, "ping"]
         stdout: StdioCollector {
             onStreamFinished: {
-                let res = text.trim();
-                if (res === "ERR" || res === "") {
-                    root.pingResult = Translation.tr("Error");
-                } else {
-                    let ms = Math.round(parseFloat(res) * 1000);
-                    root.pingResult = ms + " ms";
+                const lines = text.trim().split('\n');
+                root.pingResult = Translation.tr("Error");
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line.startsWith("OK:")) {
+                        root.pingResult = line.substring(3).trim();
+                        break;
+                    }
+                    if (line.startsWith("ERR:")) {
+                        root.pingResult = Translation.tr("Error");
+                    }
                 }
                 root.isPinging = false;
             }

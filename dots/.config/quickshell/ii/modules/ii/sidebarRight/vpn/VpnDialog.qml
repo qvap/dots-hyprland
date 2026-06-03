@@ -175,9 +175,45 @@ WindowDialog {
 
         displayText: currentIndex >= 0 && Vpn.profiles[currentIndex] ? Vpn.profiles[currentIndex].name : ""
         delegate: ItemDelegate {
+            id: profileDelegate
             width: profileSelector.width
-            text: typeof modelData !== "undefined" ? modelData.name : ""
             highlighted: profileSelector.highlightedIndex === index
+            required property var modelData
+            property string profileType: modelData?.type ?? ""
+            property string profileName: modelData?.name ?? ""
+            property bool isActive: highlighted || hovered
+            property color colText: isActive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer3
+
+            contentItem: RowLayout {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 12
+                anchors.rightMargin: 18 // could be a better solution to cropping ig, but for now it works
+
+                StyledText {
+                    Layout.fillWidth: true
+                    color: profileDelegate.colText
+                    text: profileDelegate.profileName
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Rectangle {
+                    visible: profileDelegate.profileType.length > 0
+                    implicitHeight: 22
+                    implicitWidth: typeLabel.implicitWidth + 14
+                    radius: 999
+                    color: profileDelegate.isActive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer3
+
+                    StyledText {
+                        id: typeLabel
+                        anchors.centerIn: parent
+                        text: profileDelegate.profileType
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: profileDelegate.isActive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer3
+                    }
+                }
+            }
         }
 
         currentIndex: Vpn.profiles.findIndex(item => item.isActive)
