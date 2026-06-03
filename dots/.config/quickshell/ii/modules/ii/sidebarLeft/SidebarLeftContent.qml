@@ -101,7 +101,7 @@ Item {
                 NumberAnimation {
                     target: effect
                     property: "intensity"
-                    to: 1.8
+                    to: 3.0
                     duration: 2000
                     easing.type: Easing.BezierSpline
                     easing.bezierCurve: Appearance.animationCurves.standard
