@@ -17,6 +17,10 @@ Item {
     property var inputField: messageInputField
     property string commandPrefix: "/"
 
+    signal flowSplashRequested
+    signal flowRevealRequested
+    signal flowHideRequested
+
     property var suggestionQuery: ""
     property var suggestionList: []
 
@@ -124,6 +128,7 @@ Item {
             description: Translation.tr("Clear chat history"),
             execute: () => {
                 Ai.clearMessages();
+                root.flowRevealRequested();
             }
         },
         {
@@ -507,7 +512,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 ScrollView {
                     id: inputScrollView
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(root.height * 3/5, messageInputField.height)
+                    Layout.preferredHeight: Math.min(root.height * 3 / 5, messageInputField.height)
                     clip: true
                     ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
@@ -656,6 +661,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     const inputText = messageInputField.text;
                                     messageInputField.clear();
                                     root.handleInput(inputText);
+                                    root.flowSplashRequested();
                                     event.accepted = true;
                                 }
                             } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {

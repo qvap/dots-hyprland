@@ -11,6 +11,9 @@ Item {
     property alias currentIndex: tabBar.currentIndex
     required property var tabButtonList
 
+    signal flowRevealRequested
+    signal flowHideRequested
+
     function incrementCurrentIndex() {
         tabBar.incrementCurrentIndex();
     }
@@ -33,6 +36,11 @@ Item {
         materialSymbol: modelData.icon
         onClicked: {
             root.setCurrentIndex(index);
+            if (text == Translation.tr("Intelligence")) { // bad integration, but i dont think i will come back here
+                root.flowRevealRequested();
+            } else {
+                root.flowHideRequested();
+            }
         }
     }
 

@@ -106,6 +106,10 @@ Singleton {
         property color term13: "#B2416B"
         property color term14: "#8D76AD"
         property color term15: "#221A1A"
+        property color accentRed: "#fe494c"
+        property color accentYellow: "#ffd10f"
+        property color accentGreen: "#10bc5c"
+        property color accentBlue: "#3186ff"
     }
 
     colors: QtObject {
@@ -196,6 +200,11 @@ Singleton {
         property color colErrorContainerHover: ColorUtils.mix(m3colors.m3errorContainer, m3colors.m3onErrorContainer, 0.90)
         property color colErrorContainerActive: ColorUtils.mix(m3colors.m3errorContainer, m3colors.m3onErrorContainer, 0.70)
         property color colOnErrorContainer: m3colors.m3onErrorContainer
+        // Vibrant accent colors for ai flow effect
+        property color colAccentRed: m3colors.accentRed
+        property color colAccentYellow: m3colors.accentYellow
+        property color colAccentGreen: m3colors.accentGreen
+        property color colAccentBlue: m3colors.accentBlue
     }
 
     rounding: QtObject {

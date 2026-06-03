@@ -779,5 +779,9 @@
   "Subscription loaded": "Подписка загружена",
   "Failed to load subscription": "Не удалось загрузить подписку",
   "Subscription updated": "Подписка обновлена",
-  "Failed to update subscription": "Не удалось обновить подписку"
+  "Failed to update subscription": "Не удалось обновить подписку",
+  "Mods": "Моды",
+  "Effects": "Эффекты",
+  "Enable effects (AI Flow, etc.)": "Включить эффекты (AI Flow, и т.д.)",
+  "Effects are utilized using GLSL shaders, which can affect performance on low-end devices.": "Эффекты реализованы с помощью GLSL шейдеров, которые могут влиять на производительность на слабых устройствах."
 }

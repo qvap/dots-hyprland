@@ -60,6 +60,11 @@ ApplicationWindow {
             component: "modules/settings/AdvancedConfig.qml"
         },
         {
+            name: Translation.tr("Mods"),
+            icon: "graph_6",
+            component: "modules/settings/ModConfig.qml"
+        },
+        {
             name: Translation.tr("About"),
             icon: "info",
             component: "modules/settings/About.qml"
@@ -72,8 +77,8 @@ ApplicationWindow {
     title: "illogical-impulse Settings"
 
     Component.onCompleted: {
-        MaterialThemeLoader.reapplyTheme()
-        Config.readWriteDelay = 0 // Settings app always only sets one var at a time so delay isn't needed
+        MaterialThemeLoader.reapplyTheme();
+        Config.readWriteDelay = 0; // Settings app always only sets one var at a time so delay isn't needed
     }
 
     minimumWidth: 750
@@ -88,21 +93,18 @@ ApplicationWindow {
             margins: contentPadding
         }
 
-        Keys.onPressed: (event) => {
+        Keys.onPressed: event => {
             if (event.modifiers === Qt.ControlModifier) {
                 if (event.key === Qt.Key_PageDown) {
-                    root.currentPage = Math.min(root.currentPage + 1, root.pages.length - 1)
+                    root.currentPage = Math.min(root.currentPage + 1, root.pages.length - 1);
                     event.accepted = true;
-                } 
-                else if (event.key === Qt.Key_PageUp) {
-                    root.currentPage = Math.max(root.currentPage - 1, 0)
+                } else if (event.key === Qt.Key_PageUp) {
+                    root.currentPage = Math.max(root.currentPage - 1, 0);
                     event.accepted = true;
-                }
-                else if (event.key === Qt.Key_Tab) {
+                } else if (event.key === Qt.Key_Tab) {
                     root.currentPage = (root.currentPage + 1) % root.pages.length;
                     event.accepted = true;
-                }
-                else if (event.key === Qt.Key_Backtab) {
+                } else if (event.key === Qt.Key_Backtab) {
                     root.currentPage = (root.currentPage - 1 + root.pages.length) % root.pages.length;
                     event.accepted = true;
                 }
@@ -170,7 +172,7 @@ ApplicationWindow {
                     }
                     spacing: 10
                     expanded: root.width > 900
-                    
+
                     NavigationRailExpandButton {
                         focus: root.visible
                     }
@@ -187,7 +189,7 @@ ApplicationWindow {
                         altAction: () => {
                             Quickshell.clipboardText = CF.FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse/config.json`);
                             fab.justCopied = true;
-                            revertTextTimer.restart()
+                            revertTextTimer.restart();
                         }
 
                         Timer {
@@ -212,7 +214,7 @@ ApplicationWindow {
                                 required property var index
                                 required property var modelData
                                 toggled: root.currentPage === index
-                                onPressed: root.currentPage = index;
+                                onPressed: root.currentPage = index
                                 expanded: navRail.expanded
                                 buttonIcon: modelData.icon
                                 buttonIconRotation: modelData.iconRotation || 0
@@ -240,7 +242,7 @@ ApplicationWindow {
 
                     active: Config.ready
                     Component.onCompleted: {
-                        source = root.pages[0].component
+                        source = root.pages[0].component;
                     }
 
                     Connections {
