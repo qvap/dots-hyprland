@@ -80,10 +80,10 @@ Item {
             property color color5: Appearance.colors.colPrimary
 
             NumberAnimation on iTime {
+                running: effect.visible && effect.intensity > 0
                 from: 0
                 to: 100000
                 duration: 100000000
-                running: true
                 loops: Animation.Infinite
             }
 
