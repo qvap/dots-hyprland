@@ -9,6 +9,9 @@ import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 
+/* Wraparound for virtualprivatenetwork bash-script
+*/
+
 QtObject {
     id: root
 

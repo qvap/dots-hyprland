@@ -8,6 +8,9 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
+/* VPN utility in sidebar content
+*/
+
 WindowDialog {
     id: root
 
