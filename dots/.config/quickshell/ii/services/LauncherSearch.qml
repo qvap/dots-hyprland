@@ -44,9 +44,9 @@ Singleton {
                 const actionName = fileName.replace(/\.[^/.]+$/, ""); // strip extension
                 actions.push({
                     action: actionName,
-                    execute: ((path) => (args) => {
-                        Quickshell.execDetached([path, ...(args ? args.split(" ") : [])]);
-                    })(FileUtils.trimFileProtocol(filePath.toString()))
+                    execute: (path => args => {
+                                Quickshell.execDetached([path, ...(args ? args.split(" ") : [])]);
+                            })(FileUtils.trimFileProtocol(filePath.toString()))
                 });
             }
         }
@@ -251,7 +251,6 @@ Singleton {
                     if (!entry.runInTerminal)
                         entry.execute();
                     else {
-                        // Probably needs more proper escaping, but this will do for now
                         Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`]);
                     }
                 },

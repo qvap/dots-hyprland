@@ -22,28 +22,28 @@ Scope { // Scope
     Process { // Dodge cursor away, pin, move cursor back
         id: pinWithFunnyHyprlandWorkaroundProc
         property var hook: null
-        property int cursorX;
-        property int cursorY;
+        property int cursorX
+        property int cursorY
         function doIt() {
-            command = ["hyprctl", "cursorpos"]
-            hook = (output) => {
+            command = ["hyprctl", "cursorpos"];
+            hook = output => {
                 cursorX = parseInt(output.split(",")[0]);
                 cursorY = parseInt(output.split(",")[1]);
                 doIt2();
-            }
+            };
             running = true;
         }
         function doIt2(output) {
             command = ["bash", "-c", "hyprctl dispatch 'hl.dsp.cursor.move({x=9999,y=9999})'"];
             hook = () => {
                 doIt3();
-            }
+            };
             running = true;
         }
         function doIt3(output) {
             root.pin = !root.pin;
             command = ["bash", "-c", `sleep 0.01; hyprctl dispatch 'hl.dsp.cursor.move({x=${cursorX},y=${cursorY}})'`];
-            hook = null
+            hook = null;
             running = true;
         }
         stdout: StdioCollector {
@@ -54,20 +54,22 @@ Scope { // Scope
     }
 
     function togglePin() {
-        if (!root.pin) pinWithFunnyHyprlandWorkaroundProc.doIt()
-        else root.pin = !root.pin;
+        if (!root.pin)
+            pinWithFunnyHyprlandWorkaroundProc.doIt();
+        else
+            root.pin = !root.pin;
     }
 
     Component.onCompleted: {
         root.sidebarContent = contentComponent.createObject(null, {
-            "scopeRoot": root,
+            "scopeRoot": root
         });
         sidebarLoader.item.contentParent.children = [root.sidebarContent];
     }
 
     onDetachChanged: {
         if (root.detach) {
-            GlobalFocusGrab.removeDismissable(sidebarLoader.item) // Remove sidebar from the focus grab system
+            GlobalFocusGrab.removeDismissable(sidebarLoader.item); // Remove sidebar from the focus grab system
             sidebarContent.parent = null; // Detach content from sidebar
             sidebarLoader.active = false; // Unload sidebar
             detachedSidebarLoader.active = true; // Load detached window
@@ -83,17 +85,17 @@ Scope { // Scope
     Loader {
         id: sidebarLoader
         active: true
-        
+
         sourceComponent: PanelWindow { // Window
             id: panelWindow
             visible: GlobalStates.sidebarLeftOpen
-            
+
             property bool extend: false
             property real sidebarWidth: panelWindow.extend ? Appearance.sizes.sidebarWidthExtended : Appearance.sizes.sidebarWidth
             property var contentParent: sidebarLeftBackground
 
             function hide() {
-                GlobalStates.sidebarLeftOpen = false
+                GlobalStates.sidebarLeftOpen = false;
             }
 
             exclusionMode: ExclusionMode.Normal
@@ -150,7 +152,7 @@ Scope { // Scope
                     animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
 
-                Keys.onPressed: (event) => {
+                Keys.onPressed: event => {
                     if (event.key === Qt.Key_Escape) {
                         panelWindow.hide();
                     }
@@ -180,15 +182,16 @@ Scope { // Scope
 
             visible: GlobalStates.sidebarLeftOpen
             onVisibleChanged: {
-                if (!visible) GlobalStates.sidebarLeftOpen = false;
+                if (!visible)
+                    GlobalStates.sidebarLeftOpen = false;
             }
-            
+
             Rectangle {
                 id: detachedSidebarBackground
                 anchors.fill: parent
                 color: Appearance.colors.colLayer0
 
-                Keys.onPressed: (event) => {
+                Keys.onPressed: event => {
                     if (event.modifiers === Qt.ControlModifier) {
                         if (event.key === Qt.Key_D) {
                             root.toggleDetach();
@@ -204,15 +207,15 @@ Scope { // Scope
         target: "sidebarLeft"
 
         function toggle(): void {
-            GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen
+            GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
         }
 
         function close(): void {
-            GlobalStates.sidebarLeftOpen = false
+            GlobalStates.sidebarLeftOpen = false;
         }
 
         function open(): void {
-            GlobalStates.sidebarLeftOpen = true
+            GlobalStates.sidebarLeftOpen = true;
         }
     }
 
@@ -251,5 +254,4 @@ Scope { // Scope
             root.detach = !root.detach;
         }
     }
-
 }

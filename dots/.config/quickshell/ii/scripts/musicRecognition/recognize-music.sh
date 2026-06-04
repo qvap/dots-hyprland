@@ -6,12 +6,12 @@ SOURCE_TYPE="monitor"  # monitor | input
 FIFO=$(mktemp -u /tmp/songrec_out_XXXXXX)
 
 while getopts "i:t:s:" opt; do
-  case $opt in
-    i) INTERVAL=$OPTARG ;;
-    t) TOTAL_DURATION=$OPTARG ;;
-    s) SOURCE_TYPE=$OPTARG ;;
-    *) exit 1 ;;
-  esac
+    case $opt in
+        i) INTERVAL=$OPTARG ;;
+        t) TOTAL_DURATION=$OPTARG ;;
+        s) SOURCE_TYPE=$OPTARG ;;
+        *) exit 1 ;;
+    esac
 done
 
 if ! command -v songrec >/dev/null 2>&1; then

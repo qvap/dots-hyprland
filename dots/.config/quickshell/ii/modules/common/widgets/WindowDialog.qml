@@ -10,12 +10,12 @@ Rectangle {
 
     property bool show: false
     default property alias contentData: contentColumn.data
-    property real backgroundHeight: dialogBackground.implicitHeight
+    property real backgroundHeight: contentColumn.implicitHeight + dialogBackground.radius * 2
     property real backgroundWidth: 350
     property real backgroundAnimationMovementDistance: 60
-    
-    signal dismiss()
-    Keys.onPressed: (event) => {
+
+    signal dismiss
+    Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape) {
             root.dismiss();
             event.accepted = true;
@@ -26,11 +26,10 @@ Rectangle {
     Behavior on color {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
-    visible: dialogBackground.implicitHeight > 0
+    visible: dialogBackground.height > 0 || dialogBackgroundHeightAnimation.running
 
     onShowChanged: {
-        dialogBackgroundHeightAnimation.easing.bezierCurve = (show ? Appearance.animationCurves.emphasizedDecel : Appearance.animationCurves.emphasizedAccel)
-        dialogBackground.implicitHeight = show ? backgroundHeight : 0
+        dialogBackgroundHeightAnimation.easing.bezierCurve = (show ? Appearance.animationCurves.emphasizedDecel : Appearance.animationCurves.emphasizedAccel);
     }
 
     radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
@@ -47,12 +46,12 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.large
         color: Appearance.m3colors.m3surfaceContainerHigh // Use opaque version of layer3
-        
-        property real targetY: root.height / 2 - root.backgroundHeight / 2
+
+        property real targetY: root.height / 2 - backgroundHeight / 2
         y: root.show ? targetY : (targetY - root.backgroundAnimationMovementDistance)
-        implicitWidth: root.backgroundWidth
-        implicitHeight: contentColumn.implicitHeight + dialogBackground.radius * 2
-        Behavior on implicitHeight {
+        width: root.backgroundWidth
+        height: root.show ? backgroundHeight : 0
+        Behavior on height {
             NumberAnimation {
                 id: dialogBackgroundHeightAnimation
                 duration: Appearance.animation.elementMoveFast.duration
@@ -74,18 +73,25 @@ Rectangle {
             hoverEnabled: true
         }
 
-        ColumnLayout {
-            id: contentColumn
-            anchors {
-                fill: parent
-                margins: dialogBackground.radius
-            }
-            spacing: 16
-            opacity: root.show ? 1 : 0
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
+        Item {
+            anchors.fill: parent
+            clip: true
 
+            ColumnLayout {
+                id: contentColumn
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: parent.top
+                    margins: dialogBackground.radius
+                }
+                height: root.backgroundHeight - dialogBackground.radius * 2
+                spacing: 16
+                opacity: root.show ? 1 : 0
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
         }
     }
 }
