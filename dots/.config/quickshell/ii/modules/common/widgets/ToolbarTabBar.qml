@@ -11,8 +11,8 @@ Item {
     property alias currentIndex: tabBar.currentIndex
     required property var tabButtonList
 
-    signal flowRevealRequested
-    signal flowHideRequested
+    /* ai flow specific properties */
+    property bool isAiTabActive: true
 
     function incrementCurrentIndex() {
         tabBar.incrementCurrentIndex();
@@ -37,9 +37,9 @@ Item {
         onClicked: {
             root.setCurrentIndex(index);
             if (text == Translation.tr("Intelligence")) { // bad integration, but i dont think i will come back here
-                root.flowRevealRequested();
+                root.isAiTabActive = true;
             } else {
-                root.flowHideRequested();
+                root.isAiTabActive = false;
             }
         }
     }

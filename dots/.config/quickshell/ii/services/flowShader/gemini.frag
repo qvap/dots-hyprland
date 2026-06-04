@@ -130,16 +130,31 @@ void main() {
     finalColor = mix(finalColor, totalDotColor, totalDotMask * 0.55);
 
     float waveAmplitude = 0.08 * clamp(intensity, 0.0, 2.0);
-    float liquidWave = sin(uv.x * 4.0 + baseTime * 1.5) * waveAmplitude
-            + cos(uv.x * 8.0 - baseTime * 2.3) * (waveAmplitude * 0.5)
-            + sin(uv.x * 2.0 + baseTime * 0.7) * (waveAmplitude * 0.6);
+        float liquidWave = sin(uv.x * 4.0 + baseTime * 1.5) * waveAmplitude
+                + cos(uv.x * 8.0 - baseTime * 2.3) * (waveAmplitude * 0.5)
+                + sin(uv.x * 2.0 + baseTime * 0.7) * (waveAmplitude * 0.6);
 
-    float dynamicStart = fadeStart + liquidWave;
-    float dynamicEnd = fadeEnd + liquidWave;
-    float fadeAlpha = 1.0 - smoothstep(dynamicStart, dynamicEnd, uv.y);
+        float dynamicStart = fadeStart + liquidWave;
+        float dynamicEnd = fadeEnd + liquidWave;
 
-    float finalAlpha = fadeAlpha * cornerAlpha * clamp(intensity, 0.0, 1.0);
+        // 1. Безопасные границы для smoothstep
+        float minF = min(dynamicStart, dynamicEnd);
+        float maxF = max(dynamicStart, dynamicEnd) + 0.0001;
 
-    vec3 premultipliedColor = finalColor * finalAlpha;
-    fragColor = vec4(premultipliedColor, finalAlpha) * qt_Opacity;
-}
+        // Получаем базовый градиент
+        float stepAlpha = smoothstep(minF, maxF, uv.y);
+
+        // 2. Переворачиваем логику
+        float fadeAlpha;
+        if (fadeStart > fadeEnd) {
+            fadeAlpha = stepAlpha;
+        } else {
+            fadeAlpha = 1.0 - stepAlpha;
+        }
+
+        // 3. Финальный альфа-канал
+        float finalAlpha = fadeAlpha * cornerAlpha * clamp(intensity, 0.0, 1.0);
+
+        vec3 premultipliedColor = finalColor * finalAlpha;
+        fragColor = vec4(premultipliedColor, finalAlpha) * qt_Opacity;
+    }

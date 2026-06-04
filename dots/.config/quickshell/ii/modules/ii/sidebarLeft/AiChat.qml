@@ -17,9 +17,9 @@ Item {
     property var inputField: messageInputField
     property string commandPrefix: "/"
 
-    signal flowSplashRequested
-    signal flowRevealRequested
-    signal flowHideRequested
+    /* ai flow specific properties */
+    readonly property bool isChatEmpty: messageListView.count === 0
+    signal firstMessageSent
 
     property var suggestionQuery: ""
     property var suggestionList: []
@@ -128,7 +128,6 @@ Item {
             description: Translation.tr("Clear chat history"),
             execute: () => {
                 Ai.clearMessages();
-                root.flowRevealRequested();
             }
         },
         {
@@ -214,6 +213,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 Ai.addMessage(Translation.tr("Unknown command: ") + command, Ai.interfaceRole);
             }
         } else {
+            if (root.isChatEmpty) {
+                root.firstMessageSent();
+            }
             Ai.sendUserMessage(inputText);
         }
 
@@ -661,7 +663,6 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                     const inputText = messageInputField.text;
                                     messageInputField.clear();
                                     root.handleInput(inputText);
-                                    root.flowSplashRequested();
                                     event.accepted = true;
                                 }
                             } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {
