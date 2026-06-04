@@ -36,6 +36,24 @@ vpn() {
 
     if [[ $EUID -eq 0 ]]; then
         pkexec() { "$@"; }
+
+        local script_path
+        script_path=$(realpath "${BASH_SOURCE[0]}")
+        local rule_file="/etc/polkit-1/rules.d/50-vpn-virtualprivatenetwork.rules"
+        if [[ ! -f "$rule_file" ]] || ! grep -qF "\"${script_path}\"" "$rule_file"; then
+            _info "Creating/updating polkit rule for passwordless execution..."
+            mkdir -p /etc/polkit-1/rules.d
+            cat <<EOF > "$rule_file"
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "${script_path}") {
+        return polkit.Result.YES;
+    }
+});
+EOF
+            chmod 644 "$rule_file"
+            _ok "Polkit rule created/updated at ${rule_file}"
+        fi
     fi
 
     local node_filter='.type == "vless" or .type == "vmess" or .type == "trojan" or .type == "shadowsocks" or .type == "hysteria2" or .type == "hysteria" or .type == "tuic" or .type == "anytls" or .type == "socks" or .type == "http" or .type == "ssh"'
