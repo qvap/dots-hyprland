@@ -137,6 +137,17 @@ Rectangle {
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.standard
             }
+        },
+        Transition {
+            from: "splash"
+            to: "visible"
+            NumberAnimation {
+                target: effect
+                property: "intensity"
+                duration: 2000
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.standard
+            }
         }
     ]
 
