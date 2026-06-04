@@ -62,6 +62,7 @@ Item {
             anchors.fill: parent
             fragmentShader: Quickshell.shellPath("services/flowShader/gemini.frag.qsb")
             visible: root.aiChatEnabled && root.effectsEnabled
+            opacity: Config.options.appearance.transparency.enable ? 1.0 : 0.6
 
             property real iTime: 0.0
             property size iResolution: Qt.size(effect.width, effect.height)
