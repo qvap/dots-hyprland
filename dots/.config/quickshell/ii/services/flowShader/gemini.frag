@@ -1,5 +1,7 @@
 #version 440
 
+// Created by Gemini itself
+
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
 
@@ -21,20 +23,17 @@ layout(std140, binding = 0) uniform buf {
     vec4 color5;
 };
 
-// Функция для скругленных углов
 float roundedBoxSDF(vec2 p, vec2 b, float r) {
     vec2 d = abs(p) - b + vec2(r);
     return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;
 }
 
-// Простая хэш-функция для шума (нужна для точек)
 float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
 }
 
-// 2D Шум для плавного перетекания цвета точек
 float valueNoise2D(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -49,7 +48,6 @@ float valueNoise2D(vec2 p) {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Оптимизированное смешивание 5 цветов для точек
 vec3 getMultiColor(float t) {
     t = fract(t);
     float section = t * 5.0;
@@ -62,10 +60,10 @@ vec3 getMultiColor(float t) {
     float m4 = step(4.0, section) * step(section, 5.0);
 
     return mix(color1.rgb, color2.rgb, f) * m0 +
-           mix(color2.rgb, color3.rgb, f) * m1 +
-           mix(color3.rgb, color4.rgb, f) * m2 +
-           mix(color4.rgb, color5.rgb, f) * m3 +
-           mix(color5.rgb, color1.rgb, f) * m4;
+        mix(color2.rgb, color3.rgb, f) * m1 +
+        mix(color3.rgb, color4.rgb, f) * m2 +
+        mix(color4.rgb, color5.rgb, f) * m3 +
+        mix(color5.rgb, color1.rgb, f) * m4;
 }
 
 void main() {
@@ -76,7 +74,6 @@ void main() {
         return;
     }
 
-    // --- МАСКА СКРУГЛЕНИЯ ---
     vec2 pixelPos = uv * iResolution;
     vec2 center = iResolution * 0.5;
     vec2 p = pixelPos - center;
@@ -86,7 +83,6 @@ void main() {
 
     float baseTime = iTime;
 
-    // --- ФОНОВЫЙ ГРАДИЕНТ ---
     float w1 = sin(uv.x * 2.0 + baseTime * 0.8) * 0.5 + 0.5;
     float w2 = cos(uv.y * 2.5 + baseTime * 0.6) * 0.5 + 0.5;
     float w3 = sin((uv.x + uv.y) * 1.5 + baseTime * 0.4) * 0.5 + 0.5;
@@ -99,7 +95,6 @@ void main() {
     float glow = 1.0 - distance(uv, vec2(0.5, 0.3));
     finalColor += color3.rgb * max(0.0, glow) * 0.12;
 
-    // --- БЛОК СЕТКИ ИЗ ТОЧЕК ---
     vec2 dotUV = uv * vec2(60.0 * (iResolution.x / iResolution.y), 60.0);
     vec2 gridId = floor(dotUV);
     vec2 gridFract = fract(dotUV);
@@ -112,18 +107,15 @@ void main() {
             vec2 neighbor = vec2(float(x), float(y));
             vec2 cellId = gridId + neighbor;
 
-            // Волна физического движения точек
             float waveX = sin(baseTime * 2.3 + cellId.x * 0.35 + cellId.y * 0.25) * 0.45;
             float waveY = cos(baseTime * 2.0 + cellId.x * 0.20 + cellId.y * 0.40) * 0.45;
             vec2 offset = vec2(waveX, waveY);
 
-            // Расчет маски
             vec2 localCenter = gridFract - (neighbor + vec2(0.5) + offset);
             float distToDot = length(localCenter);
             float dotSize = 0.14;
             float currentMask = 1.0 - smoothstep(dotSize - 0.04, dotSize + 0.04, distToDot);
 
-            // Цвет точки
             vec2 noisePos = cellId * 0.07 + vec2(baseTime * 0.2, -baseTime * 0.15);
             float colorT = valueNoise2D(noisePos);
             vec3 currentColor = getMultiColor(colorT) * 1.5; // * 1.5 для яркости
@@ -135,24 +127,19 @@ void main() {
         }
     }
 
-    // Накладываем точки на градиент ДО того, как применять прозрачность!
     finalColor = mix(finalColor, totalDotColor, totalDotMask * 0.55);
 
-
-    // --- ОРИГИНАЛЬНАЯ ЛОГИКА INTENSITY И ПРОЗРАЧНОСТИ ---
     float waveAmplitude = 0.08 * clamp(intensity, 0.0, 2.0);
     float liquidWave = sin(uv.x * 4.0 + baseTime * 1.5) * waveAmplitude
-                     + cos(uv.x * 8.0 - baseTime * 2.3) * (waveAmplitude * 0.5)
-                     + sin(uv.x * 2.0 + baseTime * 0.7) * (waveAmplitude * 0.6);
+            + cos(uv.x * 8.0 - baseTime * 2.3) * (waveAmplitude * 0.5)
+            + sin(uv.x * 2.0 + baseTime * 0.7) * (waveAmplitude * 0.6);
 
     float dynamicStart = fadeStart + liquidWave;
-    float dynamicEnd   = fadeEnd + liquidWave;
+    float dynamicEnd = fadeEnd + liquidWave;
     float fadeAlpha = 1.0 - smoothstep(dynamicStart, dynamicEnd, uv.y);
 
-    // Точное совпадение с оригиналом: применяем clamp(intensity) на общий альфа-канал
     float finalAlpha = fadeAlpha * cornerAlpha * clamp(intensity, 0.0, 1.0);
 
-    // Premultiplied Alpha
     vec3 premultipliedColor = finalColor * finalAlpha;
     fragColor = vec4(premultipliedColor, finalAlpha) * qt_Opacity;
 }
