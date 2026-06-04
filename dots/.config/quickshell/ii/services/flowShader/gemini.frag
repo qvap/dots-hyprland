@@ -137,14 +137,11 @@ void main() {
         float dynamicStart = fadeStart + liquidWave;
         float dynamicEnd = fadeEnd + liquidWave;
 
-        // 1. Безопасные границы для smoothstep
         float minF = min(dynamicStart, dynamicEnd);
         float maxF = max(dynamicStart, dynamicEnd) + 0.0001;
 
-        // Получаем базовый градиент
         float stepAlpha = smoothstep(minF, maxF, uv.y);
 
-        // 2. Переворачиваем логику
         float fadeAlpha;
         if (fadeStart > fadeEnd) {
             fadeAlpha = stepAlpha;
@@ -152,7 +149,6 @@ void main() {
             fadeAlpha = 1.0 - stepAlpha;
         }
 
-        // 3. Финальный альфа-канал
         float finalAlpha = fadeAlpha * cornerAlpha * clamp(intensity, 0.0, 1.0);
 
         vec3 premultipliedColor = finalColor * finalAlpha;
