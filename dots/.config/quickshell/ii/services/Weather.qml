@@ -24,86 +24,188 @@ Singleton {
     }
 
     property var location: ({
-        valid: false,
-        lat: 0,
-        lon: 0
-    })
+            valid: false,
+            lat: 0,
+            long: 0
+        })
 
     property var data: ({
-        uv: 0,
-        humidity: 0,
-        sunrise: 0,
-        sunset: 0,
-        windDir: 0,
-        wCode: 0,
-        city: 0,
-        wind: 0,
-        precip: 0,
-        visib: 0,
-        press: 0,
-        temp: 0,
-        tempFeelsLike: 0,
-        lastRefresh: 0,
-    })
+            uv: 0,
+            humidity: 0,
+            sunrise: 0,
+            sunset: 0,
+            windDir: 0,
+            wCode: 0,
+            city: 0,
+            wind: 0,
+            precip: 0,
+            visib: 0,
+            press: 0,
+            temp: 0,
+            tempFeelsLike: 0,
+            lastRefresh: 0
+        })
+
+    readonly property var wmoToWwo: ({
+            "0": "113"  // Clear sky
+            ,
+            "1": "116"  // Mainly clear
+            ,
+            "2": "116"  // Partly cloudy
+            ,
+            "3": "122"  // Overcast
+            ,
+            "45": "248" // Fog
+            ,
+            "48": "248" // Depositing rime fog
+            ,
+            "51": "263" // Drizzle: Light
+            ,
+            "53": "266" // Drizzle: Moderate
+            ,
+            "55": "296" // Drizzle: Dense
+            ,
+            "56": "281" // Freezing Drizzle: Light
+            ,
+            "57": "284" // Freezing Drizzle: Dense
+            ,
+            "61": "293" // Rain: Slight
+            ,
+            "63": "302" // Rain: Moderate
+            ,
+            "65": "308" // Rain: Heavy
+            ,
+            "66": "311" // Freezing Rain: Light
+            ,
+            "67": "314" // Freezing Rain: Heavy
+            ,
+            "71": "323" // Snow fall: Slight
+            ,
+            "73": "326" // Snow fall: Moderate
+            ,
+            "75": "338" // Snow fall: Heavy
+            ,
+            "77": "350" // Snow grains
+            ,
+            "80": "353" // Rain showers: Slight
+            ,
+            "81": "356" // Rain showers: Moderate
+            ,
+            "82": "359" // Rain showers: Violent
+            ,
+            "85": "368" // Snow showers: Slight
+            ,
+            "86": "371" // Snow showers: Heavy
+            ,
+            "95": "386" // Thunderstorm: Slight or moderate
+            ,
+            "96": "389" // Thunderstorm with slight hail
+            ,
+            "99": "392"  // Thunderstorm with heavy hail
+        })
 
     function refineData(data) {
-        let temp = {};
-        temp.uv = data?.current?.uvIndex || 0;
-        temp.humidity = (data?.current?.humidity || 0) + "%";
-        temp.sunrise = data?.astronomy?.sunrise || "0.0";
-        temp.sunset = data?.astronomy?.sunset || "0.0";
-        temp.windDir = data?.current?.winddir16Point || "N";
-        temp.wCode = data?.current?.weatherCode || "113";
-        temp.city = data?.location?.areaName[0]?.value || "City";
-        temp.temp = "";
-        temp.tempFeelsLike = "";
-        if (root.useUSCS) {
-            temp.wind = (data?.current?.windspeedMiles || 0) + " mph";
-            temp.precip = (data?.current?.precipInches || 0) + " in";
-            temp.visib = (data?.current?.visibilityMiles || 0) + " m";
-            temp.press = (data?.current?.pressureInches || 0) + " psi";
-            temp.temp += (data?.current?.temp_F || 0);
-            temp.tempFeelsLike += (data?.current?.FeelsLikeF || 0);
-            temp.temp += "°F";
-            temp.tempFeelsLike += "°F";
-        } else {
-            temp.wind = (data?.current?.windspeedKmph || 0) + " km/h";
-            temp.precip = (data?.current?.precipMM || 0) + " mm";
-            temp.visib = (data?.current?.visibility || 0) + " km";
-            temp.press = (data?.current?.pressure || 0) + " hPa";
-            temp.temp += (data?.current?.temp_C || 0);
-            temp.tempFeelsLike += (data?.current?.FeelsLikeC || 0);
-            temp.temp += "°C";
-            temp.tempFeelsLike += "°C";
+        if (!data || data.error) {
+            console.error("[WeatherService] Invalid data or location not found");
+            return;
         }
+
+        let temp = {};
+        temp.uv = data?.daily?.uv_index_max?.[0] || 0;
+        temp.humidity = (data?.current?.relative_humidity_2m || 0) + "%";
+
+        let sunriseStr = data?.daily?.sunrise?.[0];
+        let sunsetStr = data?.daily?.sunset?.[0];
+        temp.sunrise = sunriseStr ? sunriseStr.split('T')[1] : "0.0";
+        temp.sunset = sunsetStr ? sunsetStr.split('T')[1] : "0.0";
+
+        let windDeg = data?.current?.wind_direction_10m || 0;
+        const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+        let dirIndex = Math.round(windDeg / 22.5) % 16;
+        temp.windDir = directions[dirIndex];
+
+        let wmoCode = data?.current?.weather_code || 0;
+        temp.wCode = root.wmoToWwo[String(wmoCode)] || "113";
+
+        let city = "City";
+        if (data?.resolved_city) {
+            city = data.resolved_city;
+        } else if (data?.timezone) {
+            let parts = data.timezone.split('/');
+            city = parts[parts.length - 1].replace('_', ' ');
+        }
+        temp.city = city;
+
+        let currentTemp = Math.round(data?.current?.temperature_2m || 0);
+        let feelsLike = Math.round(data?.current?.apparent_temperature || 0);
+
+        let windSpeed = Math.round(data?.current?.wind_speed_10m || 0);
+        let precipitation = data?.current?.precipitation || 0;
+        let visibility = data?.current?.visibility || 0;
+        let pressure = data?.current?.pressure_msl || 0;
+
+        if (root.useUSCS) {
+            temp.wind = windSpeed + " mph";
+            temp.precip = precipitation + " in";
+            temp.visib = (visibility / 1609.34).toFixed(0) + " m";
+            temp.press = (pressure * 0.02953).toFixed(1) + " psi";
+            temp.temp = currentTemp + "°F";
+            temp.tempFeelsLike = feelsLike + "°F";
+        } else {
+            temp.wind = windSpeed + " km/h";
+            temp.precip = precipitation + " mm";
+            temp.visib = (visibility / 1000).toFixed(0) + " km";
+            temp.press = Math.round(pressure) + " hPa";
+            temp.temp = currentTemp + "°C";
+            temp.tempFeelsLike = feelsLike + "°C";
+        }
+
         temp.lastRefresh = DateTime.time + " • " + DateTime.date;
         root.data = temp;
     }
 
     function getData() {
-        let command = "curl -s wttr.in";
+        let tempUnit = root.useUSCS ? "fahrenheit" : "celsius";
+        let windUnit = root.useUSCS ? "mph" : "kmh";
+        let precipUnit = root.useUSCS ? "inch" : "mm";
 
+        let command = "";
         if (root.gpsActive && root.location.valid) {
-            command += `/${root.location.lat},${root.location.long}`;
+            command = `
+LAT="${root.location.lat}"
+LON="${root.location.long}"
+NAME=""
+`;
         } else {
-            command += `/${formatCityName(root.city)}`;
+            let escapedCity = encodeURIComponent(root.city.trim());
+            command = `
+GEO=$(curl -s "https://geocoding-api.open-meteo.com/v1/search?name=${escapedCity}&count=1&language=en&format=json")
+LAT=$(echo "$GEO" | jq -r '.results[0].latitude // empty')
+LON=$(echo "$GEO" | jq -r '.results[0].longitude // empty')
+NAME=$(echo "$GEO" | jq -r '.results[0].name // empty')
+`;
         }
 
-        // format as json
-        command += "?format=j1";
-        command += " | ";
-        // only take the current weather, location, asytronmy data
-        command += "jq '{current: .current_condition[0], location: .nearest_area[0], astronomy: .weather[0].astronomy[0]}'";
+        command += `
+if [ -n "$LAT" ]; then
+    RES=$(curl -s "https://api.open-meteo.com/v1/forecast?latitude=$LAT&longitude=$LON&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m,visibility&daily=sunrise,sunset,uv_index_max&timezone=auto&temperature_unit=${tempUnit}&wind_speed_unit=${windUnit}&precipitation_unit=${precipUnit}")
+    if [ -n "$NAME" ]; then
+        echo "$RES" | jq --arg name "$NAME" '. + {resolved_city: $name}'
+    else
+        echo "$RES"
+    fi
+else
+    echo '{"error": "Location not found"}'
+fi
+`;
+
         fetcher.command[2] = command;
         fetcher.running = true;
     }
 
-    function formatCityName(cityName) {
-        return cityName.trim().split(/\s+/).join('+');
-    }
-
     Component.onCompleted: {
-        if (!root.gpsActive) return;
+        if (!root.gpsActive)
+            return;
         console.info("[WeatherService] Starting the GPS service.");
         positionSource.start();
     }

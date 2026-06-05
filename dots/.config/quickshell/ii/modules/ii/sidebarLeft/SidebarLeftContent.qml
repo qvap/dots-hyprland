@@ -52,101 +52,16 @@ Item {
         }
     }
 
-    Rectangle {
+    AiFlow {
         id: flow
         anchors.fill: parent
-        color: "transparent"
 
-        ShaderEffect {
-            id: effect
-            anchors.fill: parent
-            fragmentShader: Quickshell.shellPath("services/flowShader/gemini.frag.qsb")
-            visible: root.aiChatEnabled && root.effectsEnabled
-            opacity: Config.options.appearance.transparency.enable ? 1.0 : 0.6
-
-            property real iTime: 0.0
-            property size iResolution: Qt.size(effect.width, effect.height)
-
-            property real intensity: 1.0
-
-            property real fadeStart: 1
-            property real fadeEnd: 0.4
-
-            property real borderRadius: Appearance.rounding.normal
-
-            property color color1: Appearance.colors.colAccentRed
-            property color color2: Appearance.colors.colAccentYellow
-            property color color3: Appearance.colors.colAccentGreen
-            property color color4: Appearance.colors.colAccentBlue
-            property color color5: Appearance.colors.colPrimary
-
-            NumberAnimation on iTime {
-                paused: !effect.visible || effect.intensity <= 0
-                from: 0
-                to: 100000
-                duration: 100000000
-                running: true
-                loops: Animation.Infinite
-            }
-
-            function safePlay(animToPlay) {
-                flowSplashAnimation.stop();
-                flowReveal.stop();
-                flowHide.stop();
-                animToPlay.start();
-            }
-
-            SequentialAnimation {
-                id: flowSplashAnimation
-                running: false
-
-                NumberAnimation {
-                    target: effect
-                    property: "intensity"
-                    to: 3.0
-                    duration: 2000
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.standard
-                }
-
-                NumberAnimation {
-                    target: effect
-                    property: "intensity"
-                    from: 1.5
-                    to: 0.0
-                    duration: 4000
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.standard
-                }
-            }
-
-            SequentialAnimation {
-                id: flowReveal
-                running: false
-
-                NumberAnimation {
-                    target: effect
-                    property: "intensity"
-                    to: 1.0
-                    duration: 2000
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.standard
-                }
-            }
-
-            SequentialAnimation {
-                id: flowHide
-                running: false
-
-                NumberAnimation {
-                    target: effect
-                    property: "intensity"
-                    to: 0.0
-                    duration: 2000
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.standard
-                }
-            }
+        isAiTabActive: tabBar.isAiTabActive
+        isAiChatEmpty: {
+            /* connects to current view and asks for isChatEmpty
+                IMPLIES that isChatEmpty property is EXCLUSIVE */
+            var item = swipeView.currentItem;
+            return (item && item.isChatEmpty !== undefined) ? item.isChatEmpty : true;
         }
     }
 
@@ -166,12 +81,6 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 tabButtonList: root.tabButtonList
                 currentIndex: swipeView.currentIndex
-                onFlowRevealRequested: {
-                    effect.safePlay(flowReveal);
-                }
-                onFlowHideRequested: {
-                    effect.safePlay(flowHide);
-                }
             }
         }
 
@@ -206,14 +115,8 @@ Item {
         Component {
             id: aiChat
             AiChat {
-                onFlowSplashRequested: {
-                    effect.safePlay(flowSplashAnimation);
-                }
-                onFlowRevealRequested: {
-                    effect.safePlay(flowReveal);
-                }
-                onFlowHideRequested: {
-                    effect.safePlay(flowHide);
+                onFirstMessageSent: {
+                    flow.splash();
                 }
             }
         }
