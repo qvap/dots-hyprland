@@ -95,20 +95,13 @@ QtObject {
         command: ["bash", root.scriptPath, "start"]
         onExited: (exitCode, exitStatus) => {
             root.refresh();
-            if (exitCode === 0)
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Connection established")]);
-            else
+            if (exitCode !== 0)
                 Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Failed to connect")]);
         }
     }
 
     stopProc: Process {
         command: ["bash", root.scriptPath, "stop"]
-        onExited: (exitCode, exitStatus) => {
-            root.refresh();
-            if (exitCode === 0)
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Disconnected")]);
-        }
     }
 
     selectProc: Process {
@@ -117,9 +110,7 @@ QtObject {
         command: ["bash", root.scriptPath, "select", profileIndex.toString()]
         onExited: (exitCode, exitStatus) => {
             root.refresh();
-            if (exitCode === 0)
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Node changed")]);
-            else
+            if (exitCode !== 0)
                 Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Failed to change node")]);
         }
     }
@@ -179,9 +170,7 @@ QtObject {
         onExited: (exitCode, exitStatus) => {
             root.isScanning = false;
             root.refresh();
-            if (exitCode === 0)
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Subscription loaded")]);
-            else
+            if (exitCode !== 0)
                 Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Failed to load subscription")]);
         }
     }
@@ -190,9 +179,7 @@ QtObject {
         onExited: (exitCode, exitStatus) => {
             root.isScanning = false;
             root.refresh();
-            if (exitCode === 0)
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Subscription updated")]);
-            else
+            if (exitCode !== 0)
                 Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN"), Translation.tr("Failed to update subscription")]);
         }
     }
