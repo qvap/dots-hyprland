@@ -4,14 +4,96 @@
 
 vpn() {
     local config_path="/etc/sing-box/config.json"
+    local custom_rules_path="/etc/illogical-impulse/sing-box/custom_rules.json"
+    local sub_cache_path="/var/cache/illogical-impulse/sing-box/subscription_raw.txt"
 
     _ok()   { echo "OK:$*"; }
     _err()  { echo "ERR:$*"; }
     _info() { echo "INFO:$*"; }
     _wait() { echo "WAIT:$*"; }
+    _needs_subscription() { echo "ERR_NEEDS_SUBSCRIPTION:$*"; }
+
+    _rebuild_config_from_cache() {
+        mkdir -p "$(dirname "$custom_rules_path")"
+        if [[ ! -r "$sub_cache_path" ]]; then
+            _err "Cached subscription not found. Run update-sub once."
+            return 1
+        fi
+
+        local script_dir parser_file
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+        parser_file="$script_dir/sub_parser.py"
+
+        _wait "Rebuilding config with custom rules..."
+        rm -f "$config_path"
+        python3 "$parser_file" "$config_path" "$sub_cache_path" "$custom_rules_path" || {
+            _err "Failed to rebuild config with custom rules"
+            return 1
+        }
+        chmod 644 "$config_path"
+    }
+
+    _require_config_for_runtime() {
+        if [[ -r "$config_path" ]]; then
+            return 0
+        fi
+        _needs_subscription "Subscription URL is not configured."
+        return 2
+    }
+
+    _validate_rule_values() {
+        local rule_type="$1"
+        shift
+
+        case "$rule_type" in
+            domain|domain_suffix|domain_keyword|domain_regex|geoip|geosite|ip_cidr) ;;
+            *) _err "Unsupported rule type: ${rule_type}"; return 1 ;;
+        esac
+
+        local value url kind
+        for value in "$@"; do
+            if [[ -z "$value" ]]; then
+                _err "Rule value cannot be empty"
+                return 1
+            fi
+
+            case "$rule_type" in
+                domain_regex)
+                    python3 - "$value" <<'PY' || { _err "Invalid domain regex: ${value}"; return 1; }
+import re
+import sys
+re.compile(sys.argv[1])
+PY
+                    ;;
+                ip_cidr)
+                    python3 - "$value" <<'PY' || { _err "Invalid IP CIDR: ${value}"; return 1; }
+import ipaddress
+import sys
+ipaddress.ip_network(sys.argv[1], strict=False)
+PY
+                    ;;
+                geoip|geosite)
+                    if [[ ! "$value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+                        _err "Invalid ${rule_type} name: ${value}"
+                        return 1
+                    fi
+                    kind="$rule_type"
+                    if [[ "$kind" == "geoip" ]]; then
+                        url="https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-${value,,}.srs"
+                    else
+                        url="https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-${value,,}.srs"
+                    fi
+                    if ! curl -fsIL -m 10 -A "Happ/1.0" "$url" >/dev/null; then
+                        _err "${rule_type} does not exist or is unavailable: ${value}"
+                        return 1
+                    fi
+                    ;;
+            esac
+        done
+    }
 
     local tool
-    for tool in jq curl python3 awk; do
+    for tool in jq curl python3 awk sing-box systemctl; do
         if ! command -v "$tool" &>/dev/null; then
             _err "Can't find dependency: ${tool}"
             return 1
@@ -26,11 +108,22 @@ vpn() {
     local cmd="$1"
     local needs_root=0
     case "$cmd" in
-        start|stop|restart|kill|autostart|update|subscribe|update-sub|logs|check) needs_root=1 ;;
+        start|restart|check)
+            if [[ ! -r "$config_path" ]]; then
+                _needs_subscription "Subscription URL is not configured."
+                return 2
+            fi
+            needs_root=1
+            ;;
+        stop|kill|autostart|update|subscribe|update-sub|delete-sub|unsubscribe|remove-sub|logs|rules) needs_root=1 ;;
         select) [[ -n "$2" ]] && needs_root=1 ;;
     esac
 
     if [[ $needs_root -eq 1 && $EUID -ne 0 ]]; then
+        if ! command -v pkexec &>/dev/null; then
+            _err "Can't find dependency: pkexec"
+            return 1
+        fi
         exec pkexec "${BASH_SOURCE[0]}" "$@"
     fi
 
@@ -59,7 +152,13 @@ EOF
     local node_filter='.type == "vless" or .type == "vmess" or .type == "trojan" or .type == "shadowsocks" or .type == "hysteria2" or .type == "hysteria" or .type == "tuic" or .type == "anytls" or .type == "socks" or .type == "http" or .type == "ssh"'
 
     case "$cmd" in
-        start|stop|restart|kill)
+        start|restart)
+            _require_config_for_runtime || return $?
+            _wait "${cmd^}ing sing-box"
+            pkexec systemctl "$cmd" sing-box && _ok "sing-box ${cmd}ed" || _err "Error ${cmd}ing"
+            ;;
+
+        stop|kill)
             _wait "${cmd^}ing sing-box"
             pkexec systemctl "$cmd" sing-box && _ok "sing-box ${cmd}ed" || _err "Error ${cmd}ing"
             ;;
@@ -110,6 +209,7 @@ EOF
             ;;
 
         check)
+            _require_config_for_runtime || return $?
             _wait "Validating config.json..."
             if pkexec sing-box check -c "$config_path"; then
                 _ok "Config is valid!"
@@ -142,10 +242,17 @@ EOF
             local sub_url
             sub_url=$(pkexec cat /etc/sing-box/subscription_url 2>/dev/null)
             if [[ -z "$sub_url" ]]; then
-                _err "URL подписки не найден."
-                return 1
+                _needs_subscription "Subscription URL is not configured."
+                return 2
             fi
             vpn subscribe "$sub_url"
+            ;;
+
+        delete-sub|unsubscribe|remove-sub)
+            _wait "Stopping sing-box service..."
+            pkexec systemctl stop sing-box >/dev/null 2>&1 || true
+            rm -f "$config_path" /etc/sing-box/subscription_url "$sub_cache_path"
+            _ok "Subscription deleted and profiles cleared"
             ;;
 
         subscribe)
@@ -156,8 +263,8 @@ EOF
 
             local sub_url="$2"
 
-            mkdir -p /etc/sing-box
-            rm -f /etc/sing-box/*.json
+            mkdir -p /etc/sing-box "$(dirname "$custom_rules_path")"
+            rm -f "$config_path"
             echo -n "$sub_url" | tee /etc/sing-box/subscription_url >/dev/null
 
             local tmp_file="/tmp/vpn_sub_raw.txt"
@@ -165,15 +272,18 @@ EOF
             local parser_file="$script_dir/sub_parser.py"
 
             _wait "Downloading data..."
-            if ! curl -sL -m 15 -A "sing-box" "$sub_url" -o "$tmp_file"; then
+            if ! curl -sL -m 15 -A "Happ/1.0" "$sub_url" -o "$tmp_file"; then
                 _err "Failed to download subscription."
                 return 1
             fi
+            mkdir -p "$(dirname "$sub_cache_path")"
+            cp "$tmp_file" "$sub_cache_path"
+            chmod 644 "$sub_cache_path"
 
             _wait "Parsing and building modern config..."
 
             # Launching parser as root: it overwrites config.json.
-            pkexec python3 "$parser_file" "$config_path" "$tmp_file"
+            pkexec python3 "$parser_file" "$config_path" "$tmp_file" "$custom_rules_path"
             local py_exit=$?
 
             rm -f "$tmp_file"
@@ -191,8 +301,8 @@ EOF
 
         select)
             if [[ ! -r "$config_path" ]]; then
-                _err "Config not readable. Run 'vpn update-sub'."
-                return 1
+                _needs_subscription "Subscription URL is not configured."
+                return 2
             fi
 
             local main_selector
@@ -244,9 +354,173 @@ EOF
             done
             ;;
 
+        rules)
+            local action="${2:-show}"
+            mkdir -p /etc/sing-box "$(dirname "$custom_rules_path")"
+
+            case "$action" in
+                path)
+                    echo "RULES_PATH:${custom_rules_path}"
+                    ;;
+
+                show)
+                    if [[ -f "$custom_rules_path" ]]; then
+                        jq . "$custom_rules_path"
+                    else
+                        echo '{"rules":[]}'
+                    fi
+                    ;;
+
+                template)
+                    cat <<'EOF'
+{
+  "hysteria2": {
+    "up_mbps": 50,
+    "down_mbps": 200
+  },
+  "rules": [
+    {
+      "outbound": "proxy",
+      "domain_suffix": ["example.com"],
+      "geosite": ["youtube"],
+      "geoip": ["telegram"]
+    },
+    {
+      "outbound": "direct",
+      "domain": ["local.example"],
+      "geoip": ["private"]
+    }
+  ],
+  "rule_sets": []
+}
+EOF
+                    ;;
+
+                set)
+                    if [[ $# -lt 3 ]]; then
+                        _err "Usage: vpn rules set <json-or-file>"
+                        return 1
+                    fi
+
+                    local input="$3"
+                    local tmp_rules="/tmp/vpn_custom_rules.json"
+                    if [[ -f "$input" ]]; then
+                        jq . "$input" > "$tmp_rules" || { _err "Invalid JSON"; rm -f "$tmp_rules"; return 1; }
+                    else
+                        jq . <<< "$input" > "$tmp_rules" || { _err "Invalid JSON"; rm -f "$tmp_rules"; return 1; }
+                    fi
+                    mv "$tmp_rules" "$custom_rules_path"
+                    chmod 644 "$custom_rules_path"
+                    _ok "Custom rules saved"
+                    ;;
+
+                add)
+                    if [[ $# -lt 5 ]]; then
+                        _err "Usage: vpn rules add <proxy|direct|block|OUTBOUND> <domain|domain_suffix|domain_keyword|domain_regex|geoip|geosite|ip_cidr> <value...>"
+                        return 1
+                    fi
+
+                    local outbound="$3"
+                    local rule_type="$4"
+                    shift 4
+                    _validate_rule_values "$rule_type" "$@" || return 1
+                    local tmp_values="/tmp/vpn_custom_rule_values.json"
+                    local tmp_rules="/tmp/vpn_custom_rules.json"
+                    printf '%s\n' "$@" | jq -R . | jq -s . > "$tmp_values" || { _err "Failed to encode values"; rm -f "$tmp_values"; return 1; }
+                    [[ -f "$custom_rules_path" ]] || echo '{"rules":[]}' > "$custom_rules_path"
+                    jq --arg outbound "$outbound" --arg rule_type "$rule_type" --slurpfile values "$tmp_values" '
+                        .rules = (.rules // []) |
+                        .rules as $rules |
+                        if ($outbound == "block" or $outbound == "reject") then
+                            ($rules | map((.action // "route") == "reject") | index(true)) as $idx |
+                            if $idx == null then
+                                .rules += [{"action": "reject", ($rule_type): $values[0]}]
+                            else
+                                .rules[$idx][$rule_type] = (((.rules[$idx][$rule_type] // []) + $values[0]) | unique)
+                            end
+                        else
+                            ($rules | map(((.action // "route") == "route") and ((.outbound // "proxy") == $outbound)) | index(true)) as $idx |
+                            if $idx == null then
+                                .rules += [{"outbound": $outbound, ($rule_type): $values[0]}]
+                            else
+                                .rules[$idx][$rule_type] = (((.rules[$idx][$rule_type] // []) + $values[0]) | unique)
+                            end
+                        end
+                    ' "$custom_rules_path" > "$tmp_rules" || { _err "Failed to add rule"; rm -f "$tmp_values" "$tmp_rules"; return 1; }
+                    mv "$tmp_rules" "$custom_rules_path"
+                    chmod 644 "$custom_rules_path"
+                    rm -f "$tmp_values"
+                    _ok "Custom rule added"
+                    ;;
+
+                remove|delete)
+                    if [[ $# -lt 3 || ! "$3" =~ ^[0-9]+$ ]]; then
+                        _err "Usage: vpn rules remove <index> [rule-type value]"
+                        return 1
+                    fi
+
+                    local idx="$3"
+                    local rule_type="${4:-}"
+                    local value="${5:-}"
+                    local tmp_rules="/tmp/vpn_custom_rules.json"
+                    [[ -f "$custom_rules_path" ]] || echo '{"rules":[]}' > "$custom_rules_path"
+                    if [[ -n "$rule_type" ]]; then
+                        jq --argjson idx "$idx" --arg rule_type "$rule_type" --arg value "$value" '
+                            .rules = (.rules // []) |
+                            if $idx < 0 or $idx >= (.rules | length) then
+                                error("No rule with index " + ($idx | tostring))
+                            else
+                                .rules[$idx][$rule_type] = ((.rules[$idx][$rule_type] // []) | map(select(. != $value))) |
+                                if ((.rules[$idx][$rule_type] // []) | length) == 0 then
+                                    del(.rules[$idx][$rule_type])
+                                else
+                                    .
+                                end |
+                                if ((.rules[$idx] | keys - ["action", "outbound"]) | length) == 0 then
+                                    .rules = (.rules | del(.[$idx]))
+                                else
+                                    .
+                                end
+                            end
+                        ' "$custom_rules_path" > "$tmp_rules" || { _err "Failed to remove rule"; rm -f "$tmp_rules"; return 1; }
+                    else
+                        jq --argjson idx "$idx" '
+                            .rules = (.rules // []) |
+                            if $idx < 0 or $idx >= (.rules | length) then
+                                error("No rule with index " + ($idx | tostring))
+                            else
+                                .rules = (.rules | del(.[$idx]))
+                            end
+                        ' "$custom_rules_path" > "$tmp_rules" || { _err "Failed to remove rule"; rm -f "$tmp_rules"; return 1; }
+                    fi
+                    mv "$tmp_rules" "$custom_rules_path"
+                    chmod 644 "$custom_rules_path"
+                    _ok "Custom rule removed"
+                    ;;
+
+                clear)
+                    printf '{"rules":[]}' > "$custom_rules_path"
+                    chmod 644 "$custom_rules_path"
+                    _ok "Custom rules cleared"
+                    ;;
+
+                apply)
+                    _rebuild_config_from_cache || return 1
+                    _wait "Restarting sing-box service..."
+                    pkexec systemctl restart sing-box && _ok "Custom rules applied" || _err "Error restarting sing-box"
+                    ;;
+
+                *)
+                    _err "Usage: vpn rules [show|template|set|add|remove|clear|apply|path]"
+                    return 1
+                    ;;
+            esac
+            ;;
+
         help|-h|--help)
             echo "CMD:subscribe:<url>:download and generate config (Throne-style parsing)"
             echo "CMD:update-sub::update existing subscription"
+            echo "CMD:delete-sub::delete saved subscription URL and clear generated profiles"
             echo "CMD:select:[N]:select proxy node"
             echo "CMD:status::current status"
             echo "CMD:start::start sing-box"
@@ -258,6 +532,7 @@ EOF
             echo "CMD:ping::check current connection latency"
             echo "CMD:logs:[new]:logs (new — real-time)"
             echo "CMD:speedtest::run speed test"
+            echo "CMD:rules:[show|template|set|add|remove|clear|apply|path]:manage custom routing rules"
             ;;
 
         *) _err "Invalid command. Try: vpn help"; return 1 ;;

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -14,7 +16,13 @@ import qs.services
 WindowDialog {
     id: root
 
+    property string detailsQmlPath: Quickshell.shellPath("vpnDetails.qml")
+
     backgroundHeight: 600
+
+    Component.onCompleted: Vpn.refresh()
+    onShowChanged: if (show)
+        Vpn.refresh()
 
     WindowDialogTitle {
         text: Translation.tr("VPN Connections")
@@ -166,6 +174,35 @@ WindowDialog {
         }
     }
 
+    ColumnLayout {
+        visible: Vpn.needsSubscription && Vpn.profiles.length === 0
+        Layout.fillWidth: true
+        Layout.bottomMargin: 8
+        spacing: 8
+
+        StyledText {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: Appearance.colors.colSubtext
+            text: Vpn.subscriptionStatus.length > 0 ? Vpn.subscriptionStatus : Translation.tr("Enter subscription URL to continue.")
+        }
+
+        MaterialTextField {
+            id: subscriptionField
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Subscription URL")
+            text: Vpn.subscriptionUrl
+            onAccepted: Vpn.subscribe(text)
+        }
+
+        StyledButton {
+            Layout.fillWidth: true
+            text: Vpn.isScanning ? Translation.tr("Loading...") : Translation.tr("Load subscription")
+            enabled: !Vpn.isScanning
+            onClicked: Vpn.subscribe(subscriptionField.text)
+        }
+    }
+
     // Profiles (Nodes) list
     StyledComboBox {
         id: profileSelector
@@ -180,7 +217,8 @@ WindowDialog {
         delegate: ItemDelegate {
             id: profileDelegate
             width: profileSelector.width
-            highlighted: profileSelector.highlightedIndex === index
+            highlighted: profileSelector.highlightedIndex === profileDelegate.index
+            required property int index
             required property var modelData
             property string profileType: modelData?.type ?? ""
             property string profileName: modelData?.name ?? ""
@@ -255,9 +293,11 @@ WindowDialog {
         Layout.fillWidth: true
 
         DialogButton {
-            buttonText: Translation.tr("Update subscription")
+            buttonText: Translation.tr("Details")
             onClicked: {
-                Vpn.updateSubscription();
+                root.dismiss();
+                GlobalStates.sidebarRightOpen = false;
+                Quickshell.execDetached(["qs", "-p", root.detailsQmlPath]);
             }
         }
 
