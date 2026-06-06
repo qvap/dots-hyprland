@@ -37,4 +37,22 @@ ContentPage {
             text: Translation.tr('Effects are utilized using GLSL shaders, which can affect performance on low-end devices.')
         }
     }
+
+    ContentSection {
+        icon: "airwave"
+        title: Translation.tr("AI Flow")
+
+        ConfigSwitch {
+            buttonIcon: "mode_off_on"
+            text: Translation.tr("AI Flow Enabled")
+            checked: Config.options.effects.aiFlowEnabled
+            enabled: Config.options.effects.enabled
+            onCheckedChanged: {
+                Config.options.effects.aiFlowEnabled = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Enable AI Chat waves flow effect")
+            }
+        }
+    }
 }

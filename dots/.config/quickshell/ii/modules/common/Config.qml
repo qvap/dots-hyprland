@@ -647,6 +647,7 @@ Singleton {
 
             property JsonObject effects: JsonObject {
                 property bool enabled: false
+                property bool aiFlowEnabled: false
             }
         }
     }

@@ -14,6 +14,7 @@ Item {
     property int sidebarPadding: 10
     anchors.fill: parent
     property bool aiChatEnabled: Config.options.policies.ai !== 0
+    property bool aiFlowEnabled: Config.options.effects.aiFlowEnabled
     property bool effectsEnabled: Config.options.effects.enabled
     property bool translatorEnabled: Config.options.sidebar.translator.enable
     property bool animeEnabled: Config.options.policies.weeb !== 0
@@ -52,16 +53,47 @@ Item {
         }
     }
 
-    AiFlow {
+    QtObject {
         id: flow
-        anchors.fill: parent
 
-        isAiTabActive: tabBar.isAiTabActive
-        isAiChatEmpty: {
-            /* connects to current view and asks for isChatEmpty
-                IMPLIES that isChatEmpty property is EXCLUSIVE */
-            var item = swipeView.currentItem;
-            return (item && item.isChatEmpty !== undefined) ? item.isChatEmpty : true;
+        function splash() {
+            const item = flowLoader.item;
+            if (item && item["splash"])
+                item["splash"]();
+        }
+    }
+
+    Loader {
+        id: flowLoader
+        anchors.fill: parent
+        active: root.effectsEnabled && root.aiFlowEnabled
+        sourceComponent: flowComponent
+
+        Binding {
+            target: flowLoader.item
+            property: "isAiTabActive"
+            value: tabBar.isAiTabActive
+            when: flowLoader.item !== null
+        }
+
+        Binding {
+            target: flowLoader.item
+            property: "isAiChatEmpty"
+            value: {
+                /* connects to current view and asks for isChatEmpty
+                    IMPLIES that isChatEmpty property is EXCLUSIVE */
+                var item = swipeView.currentItem;
+                return (item && item.isChatEmpty !== undefined) ? item.isChatEmpty : true;
+            }
+            when: flowLoader.item !== null
+        }
+    }
+
+    Component {
+        id: flowComponent
+
+        AiFlow {
+            anchors.fill: parent
         }
     }
 

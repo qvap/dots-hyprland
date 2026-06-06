@@ -447,21 +447,6 @@ ApplicationWindow {
                             color: Appearance.colors.colSubtext
                             font.pixelSize: Appearance.font.pixelSize.normal
                         }
-
-                        ConfigRow {
-                            uniform: true
-                            ActionButton {
-                                text: Vpn.status === "active" || Vpn.status === "connecting" ? Translation.tr("Disconnect") : Translation.tr("Connect")
-                                onClicked: Vpn.toggle()
-                            }
-                            ActionButton {
-                                text: Translation.tr("Refresh")
-                                onClicked: {
-                                    Vpn.refresh();
-                                    Vpn.refreshRules();
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -648,11 +633,9 @@ ApplicationWindow {
                 value: Vpn.routingRulesPath
             }
 
-            StyledText {
+            NoticeBox {
                 Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                color: Appearance.colors.colOnLayer1
-                text: Translation.tr("Rules are saved through VPN service and merged into sing-box config after each apply or subscription update.")
+                text: Translation.tr("Rules are saved through VPN service and merged into sing-box config after each apply or subscription update")
             }
 
             ContentSubsectionLabel {
@@ -759,14 +742,9 @@ ApplicationWindow {
             ConfigRow {
                 uniform: true
                 ActionButton {
-                    text: Vpn.isRoutingBusy ? Translation.tr("Working...") : Translation.tr("Add rule")
+                    text: Vpn.isRoutingBusy ? Translation.tr("Loading...") : Translation.tr("Add rule")
                     enabled: !Vpn.isRoutingBusy
                     onClicked: Vpn.addRoutingRule(routingRoot.outbound, routingRoot.ruleType, routingRoot.valuesFromText(ruleValuesField.text))
-                }
-                ActionButton {
-                    text: Translation.tr("Apply")
-                    enabled: !Vpn.isRoutingBusy
-                    onClicked: Vpn.applyRoutingRules()
                 }
             }
 
@@ -775,7 +753,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: root.isRoutingError(Vpn.routingStatus) ? Appearance.colors.colError : Appearance.colors.colSubtext
-                text: Vpn.routingStatus
+                text: Translation.tr(Vpn.routingStatus)
             }
         }
 
@@ -868,6 +846,11 @@ ApplicationWindow {
                     onClicked: Vpn.refreshRules()
                 }
                 ActionButton {
+                    text: Translation.tr("Apply")
+                    enabled: !Vpn.isRoutingBusy
+                    onClicked: Vpn.applyRoutingRules()
+                }
+                ActionButton {
                     text: Translation.tr("Clear")
                     enabled: !Vpn.isRoutingBusy && Vpn.routingRuleItems.length > 0
                     onClicked: Vpn.clearRoutingRules()
@@ -883,7 +866,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Appearance.colors.colSubtext
-                text: Translation.tr("Edit the whole custom rules document when you need rule_sets or complex sing-box syntax.")
+                text: Translation.tr("Edit the whole custom rules document when you need rule_sets or complex sing-box syntax")
             }
 
             Rectangle {

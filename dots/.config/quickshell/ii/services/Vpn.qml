@@ -541,7 +541,6 @@ QtObject {
             if (exitCode !== 0) {
                 if (root.routingStatus.length === 0)
                     root.routingStatus = Translation.tr("Routing command failed");
-                Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "network-vpn-symbolic", Translation.tr("VPN Routing"), root.routingStatus]);
             } else if (root.routingStatus.length === 0) {
                 root.routingStatus = Translation.tr("Done");
             }

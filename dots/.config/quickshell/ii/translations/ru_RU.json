@@ -798,8 +798,12 @@
   "Status": "Статус",
   "Select": "Выбрать",
   "Create routing rule": "Добавление правил маршрутизации",
+  "Custom rule added": "Правило добавлено",
+  "Custom rule removed": "Правило удалено",
+  "Applying rules...": "Применение правил...",
+  "Adding rule...": "Добавление правила...",
   "Rules file": "Файл правил",
-  "Rules are saved through VPN service and merged into sing-box config after each apply or subscription update.": "Правила маршрутизации сохраняются через VPN сервис и объединяются в конфигурацию sing-box после каждого применения или обновления подписки.",
+  "Rules are saved through VPN service and merged into sing-box config after each apply or subscription update": "Правила маршрутизации сохраняются через VPN сервис и объединяются в конфигурацию sing-box после каждого применения или обновления подписки",
   "Outbound": "Аутбаунд",
   "Proxy": "Proxy",
   "Direct": "Direct",
@@ -811,7 +815,7 @@
   "Current rules": "Текущие правила",
   "Clear": "Очистить",
   "Advanced JSON": "Расширенный JSON",
-  "Edit the whole custom rules document when you need rule_sets or complex sing-box syntax.": "Редактируйте весь документ правил, когда вам нужен сложный синтаксис sing-box.",
+  "Edit the whole custom rules document when you need rule_sets or complex sing-box syntax": "Редактируйте весь документ правил, когда вам нужен сложный синтаксис sing-box",
   "Reload": "Перезагрузить",
   "Save JSON": "Сохранить JSON",
 
@@ -819,6 +823,9 @@
   "Effects": "Эффекты",
   "Enable effects (AI Flow, etc.)": "Включить эффекты (AI Flow, и т.д.)",
   "Effects are utilized using GLSL shaders, which can affect performance on low-end devices.": "Эффекты реализованы с помощью GLSL шейдеров, которые могут влиять на производительность на слабых устройствах.",
+  "AI Flow": "AI Flow",
+  "AI Flow Enabled": "Включить AI Flow",
+  "Enable AI Chat waves flow effect": "Включить эффект волн чата AI",
   "Modification": "Модификация",
   "qvap": "qvap"
 }

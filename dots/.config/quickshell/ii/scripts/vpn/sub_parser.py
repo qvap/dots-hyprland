@@ -1702,7 +1702,6 @@ def build_custom_route_config(custom_rules_path=None):
 
 
 def build_config():
-    # Селектор со всеми спаршенными узлами
     selector = {
         "type": "selector",
         "tag": "proxy",
@@ -1710,11 +1709,9 @@ def build_config():
         "default": ORDER_TAGS[0] if ORDER_TAGS else "",
     }
 
-    # Собираем домены всех прокси-узлов, чтобы пустить их DNS-запросы напрямую
     server_domains = []
     for ob in OUTBOUNDS:
         srv = ob.get("server", "")
-        # Проверяем, что это строка и она не является чистым IP-адресом
         if srv and isinstance(srv, str) and not re.match(r"^[\d\.:]+$", srv):
             if srv not in server_domains:
                 server_domains.append(srv)
@@ -1743,7 +1740,6 @@ def build_config():
         },
     ]
 
-    # Маршрутизируем домены прокси-серверов напрямую (как в Throne)
     if server_domains:
         dns_rules.append(
             {
@@ -1758,7 +1754,6 @@ def build_config():
             }
         )
 
-    # Catch-all правило для dns-direct
     dns_rules.append({"action": "route", "server": "dns-direct", "strategy": ""})
 
     custom_route_rules, custom_rule_sets = build_custom_route_config()
