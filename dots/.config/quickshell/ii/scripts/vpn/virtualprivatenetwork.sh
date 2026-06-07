@@ -510,8 +510,33 @@ EOF
                     pkexec systemctl restart sing-box && _ok "Custom rules applied" || _err "Error restarting sing-box"
                     ;;
 
+                fakeip)
+                    local val="${3:-}"
+                    [[ -f "$custom_rules_path" ]] || echo '{"rules":[]}' > "$custom_rules_path"
+                    case "$val" in
+                        on|off)
+                            local bool tmp_rules="/tmp/vpn_custom_rules.json"
+                            [[ "$val" == "on" ]] && bool=true || bool=false
+                            jq --argjson v "$bool" '.dns = (.dns // {}) | .dns.fakeip = $v' "$custom_rules_path" > "$tmp_rules" \
+                                || { _err "Failed to update FakeIP setting"; rm -f "$tmp_rules"; return 1; }
+                            mv "$tmp_rules" "$custom_rules_path"
+                            chmod 644 "$custom_rules_path"
+                            _rebuild_config_from_cache || return 1
+                            _wait "Restarting sing-box service..."
+                            pkexec systemctl restart sing-box && _ok "FakeIP ${val}" || _err "Error restarting sing-box"
+                            ;;
+                        *)
+                            if [[ -f "$custom_rules_path" ]] && [[ "$(jq -r '.dns.fakeip // false' "$custom_rules_path")" == "true" ]]; then
+                                _ok "FakeIP on"
+                            else
+                                _ok "FakeIP off"
+                            fi
+                            ;;
+                    esac
+                    ;;
+
                 *)
-                    _err "Usage: vpn rules [show|template|set|add|remove|clear|apply|path]"
+                    _err "Usage: vpn rules [show|template|set|add|remove|clear|apply|fakeip|path]"
                     return 1
                     ;;
             esac
@@ -532,7 +557,7 @@ EOF
             echo "CMD:ping::check current connection latency"
             echo "CMD:logs:[new]:logs (new — real-time)"
             echo "CMD:speedtest::run speed test"
-            echo "CMD:rules:[show|template|set|add|remove|clear|apply|path]:manage custom routing rules"
+            echo "CMD:rules:[show|template|set|add|remove|clear|apply|fakeip|path]:manage custom routing rules"
             ;;
 
         *) _err "Invalid command. Try: vpn help"; return 1 ;;

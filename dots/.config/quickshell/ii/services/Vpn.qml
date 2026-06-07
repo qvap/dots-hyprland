@@ -29,6 +29,7 @@ QtObject {
     property string routingRulesRaw: "{\n  \"rules\": []\n}"
     property string routingStatus: ""
     property bool isRoutingBusy: false
+    property bool fakeipEnabled: false
     property bool needsSubscription: false
     property string subscriptionUrl: ""
     property string subscriptionStatus: ""
@@ -263,6 +264,15 @@ QtObject {
         isRoutingBusy = true;
         routingStatus = Translation.tr("Applying rules...");
         rulesCommandProc.command = ["bash", scriptPath, "rules", "apply"];
+        rulesCommandProc.running = true;
+    }
+
+    function setFakeip(enabled) {
+        if (isRoutingBusy)
+            return;
+        isRoutingBusy = true;
+        routingStatus = enabled ? Translation.tr("Enabling FakeIP...") : Translation.tr("Disabling FakeIP...");
+        rulesCommandProc.command = ["bash", scriptPath, "rules", "fakeip", enabled ? "on" : "off"];
         rulesCommandProc.running = true;
     }
 
@@ -505,6 +515,7 @@ QtObject {
                     const parsed = JSON.parse(raw);
                     root.routingRules = parsed.rules || [];
                     root.routingRuleItems = root.buildRoutingRuleItems(root.routingRules);
+                    root.fakeipEnabled = !!(parsed.dns && parsed.dns.fakeip === true);
                     if (root.routingStatus === Translation.tr("Invalid JSON"))
                         root.routingStatus = "";
                 } catch (e) {

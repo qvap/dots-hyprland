@@ -624,6 +624,27 @@ ApplicationWindow {
         }
 
         ContentSection {
+            icon: "dns"
+            title: Translation.tr("DNS")
+
+            ConfigSwitch {
+                buttonIcon: "frame_inspect"
+                text: Translation.tr("Enable FakeIP")
+                enabled: !Vpn.isRoutingBusy
+                checked: Vpn.fakeipEnabled
+                onCheckedChanged: {
+                    if (checked !== Vpn.fakeipEnabled)
+                        Vpn.setFakeip(checked);
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                text: Translation.tr("FakeIP speeds up DNS resolution and prevents leaks, but may break some apps (Spotify, Discord, games). Disabled by default. Changing this rebuilds the config and restarts the VPN")
+            }
+        }
+
+        ContentSection {
             icon: "alt_route"
             title: Translation.tr("Create routing rule")
 

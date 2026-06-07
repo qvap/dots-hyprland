@@ -15,9 +15,9 @@ import urllib.parse
 # ---------------------------------------------------------------------------
 # Collected nodes
 # ---------------------------------------------------------------------------
-OUTBOUNDS = []  # proxy outbounds (everything except wireguard)
-ENDPOINTS = []  # wireguard endpoints (sing-box >= 1.11)
-ORDER_TAGS = []  # tags in subscription order (proxies + endpoints mixed)
+OUTBOUNDS = []
+ENDPOINTS = []
+ORDER_TAGS = []
 _USED_TAGS = set()
 CUSTOM_RULES_PATH = "/etc/illogical-impulse/sing-box/custom_rules.json"
 CUSTOM_SETTINGS = {}
@@ -84,9 +84,6 @@ def b64_decode_loose(s):
 
 
 def try_b64_text(s):
-    """Throne's DecodeB64IfValid + v2rayNG-style binary guard: only treat as
-    base64 when it both looks like base64 and decodes to something that
-    resembles subscription content."""
     s2 = (s or "").strip()
     if len(s2) < 8:
         return None
@@ -98,8 +95,6 @@ def try_b64_text(s):
         return None
     if not txt or not txt.strip():
         return None
-    # Some subscription endpoints serve base64-encoded compressed blobs that
-    # decode to mostly-binary garbage. Reject them before they get dispatched.
     printable = sum(1 for c in txt if c.isprintable() or c in "\n\r\t")
     if printable / max(len(txt), 1) < 0.9:
         return None
@@ -244,7 +239,7 @@ def build_tls(
             reality["public_key"] = pbk
         reality["short_id"] = sid or ""
         tls["reality"] = reality
-        if "utls" not in tls:  # REALITY requires uTLS
+        if "utls" not in tls:
             tls["utls"] = {"enabled": True, "fingerprint": "chrome"}
     return tls
 
@@ -254,10 +249,9 @@ def build_transport(net, q, host_header=""):
     path = q.get("path", "") or "/"
     host = host_header or q.get("host", "")
     if net in ("ws", "websocket"):
-        t = {"type": "websocket", "path": path}
+        t = {"type": "ws", "path": path}
         if host:
             t["headers"] = {"Host": host}
-        ed = q.get("ed") or q.get("eh")
         try:
             if q.get("ed"):
                 t["max_early_data"] = int(q.get("ed"))
@@ -276,19 +270,7 @@ def build_transport(net, q, host_header=""):
             t["host"] = host
         return t
     if net in ("xhttp", "splithttp"):
-        # XHTTP (xray-core names it `splithttp`, v2rayNG emits it the same way)
-        # is a sing-box 1.11+ transport that splits traffic over plain HTTP/1.1
-        # to defeat pattern-based DPI. Query keys follow the xray spec:
-        #   path, host, mode (auto | packet-up | stream-up | stream-one).
-        t = {"type": "xhttp"}
-        if path and path != "/":
-            t["path"] = path
-        if host:
-            t["host"] = [h for h in host.split(",") if h]
-        mode = q.get("mode", "")
-        if mode in ("auto", "packet-up", "stream-up", "stream-one"):
-            t["mode"] = mode
-        return t
+        return None
     if net in ("h2", "http"):
         t = {"type": "http"}
         if path and path != "/":
@@ -296,7 +278,7 @@ def build_transport(net, q, host_header=""):
         if host:
             t["host"] = [h for h in host.split(",") if h]
         return t
-    return None  # tcp / raw => no transport
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -555,7 +537,6 @@ def parse_shadowsocks(line):
     port = 0
     if "@" in rest:
         userinfo, server = rest.rsplit("@", 1)
-        # userinfo may be base64(method:password) or plain method:password
         creds = None
         try:
             dec = b64_decode_loose(userinfo).decode("utf-8")
@@ -570,7 +551,6 @@ def parse_shadowsocks(line):
         host, _, p = server.partition(":")
         port = int(p or 0)
     else:
-        # legacy: whole thing base64(method:password@host:port)
         try:
             dec = b64_decode_loose(rest).decode("utf-8")
         except Exception:
@@ -594,7 +574,6 @@ def parse_shadowsocks(line):
     }
     plugin = q.get("plugin", "")
     if plugin:
-        # plugin string is "name;opt1=val;opt2"
         if ";" in plugin:
             name, opts = plugin.split(";", 1)
         else:
@@ -734,7 +713,6 @@ def dispatch_json_object(j):
 
 
 def parse_json_link(line):
-    """json://<base64url(json)>  (Throne 'json link' format)."""
     u = urllib.parse.urlparse(line)
     frag = u.fragment or (line[len("json://") :])
     try:
@@ -780,7 +758,7 @@ def parse_share_link(line):
 
 
 # ---------------------------------------------------------------------------
-# sing-box JSON node ingestion (already in sing-box format)
+# sing-box JSON node ingestion
 # ---------------------------------------------------------------------------
 VALID_NODE_TYPES = {
     "socks",
@@ -802,7 +780,6 @@ VALID_NODE_TYPES = {
 
 
 def _wg_outbound_to_endpoint(out):
-    """Convert a legacy (<=1.10) WireGuard outbound to a 1.11+ endpoint."""
     ep = {"type": "wireguard", "tag": out.get("tag", "wireguard")}
     addr = out.get("local_address") or out.get("address") or []
     if isinstance(addr, str):
@@ -839,10 +816,8 @@ def parse_singbox_node(out):
     if t not in VALID_NODE_TYPES:
         return
     node = dict(out)
-    # Drop dial fields that were removed/renamed and would taint a clean config.
     node.pop("domain_strategy", None)
     if t == "wireguard":
-        # legacy outbound vs already-endpoint
         if "peers" in node or "address" in node and "server" not in node:
             node["type"] = "wireguard"
             add_endpoint(node)
@@ -971,7 +946,7 @@ def _xray_stream_transport(stream):
         for k, v in headers.items():
             if str(k).lower() == "host":
                 host = v
-        tr = {"type": "websocket", "path": path}
+        tr = {"type": "ws", "path": path}
         if host:
             tr["headers"] = {"Host": host}
         return tr
@@ -1049,9 +1024,6 @@ def parse_xray_outbound(out, remarks=""):
     alpn = tls_settings.get("alpn", "")
     if isinstance(alpn, list):
         alpn = ",".join(str(x) for x in alpn if x)
-    # sing-box hysteria/hysteria2 uses QUIC TLS and rejects uTLS:
-    #   unsupported usage for uTLS
-    # Happ/Xray may still export tlsSettings.fingerprint, so intentionally ignore it here.
     tls = build_tls(
         "tls" if security in ("", "tls") else security,
         sni,
@@ -1111,7 +1083,7 @@ def parse_xray_outbound(out, remarks=""):
 
 
 # ---------------------------------------------------------------------------
-# Clash (best-effort, no remote conversion API available)
+# Clash
 # ---------------------------------------------------------------------------
 def _clash_node_to_singbox(p):
     if not isinstance(p, dict):
@@ -1135,7 +1107,7 @@ def _clash_node_to_singbox(p):
             for k, v in hdr.items():
                 if k.lower() == "host":
                     host = v
-            ob["transport"] = {"type": "websocket", "path": path}
+            ob["transport"] = {"type": "ws", "path": path}
             if host:
                 ob["transport"]["headers"] = {"Host": host}
         elif net == "grpc":
@@ -1284,7 +1256,7 @@ def _clash_node_to_singbox(p):
 def update_clash(text):
     nodes = None
     try:
-        import yaml  # PyYAML if present -> full fidelity
+        import yaml
 
         data = yaml.safe_load(text)
         if isinstance(data, dict):
@@ -1301,15 +1273,12 @@ def update_clash(text):
 
 
 def _clash_proxies_fallback(text):
-    """Tolerant parser for the `proxies:` list when PyYAML is unavailable.
-    Handles inline flow maps `- {a: b}` and block maps with nested mappings
-    (e.g. ws-opts / headers / reality-opts) via an indentation stack."""
     lines = text.splitlines()
     out = []
     in_proxies = False
-    cur = None  # current proxy dict
-    item_indent = None  # indent of the `- ` marker
-    stack = []  # list of (indent, container_dict)
+    cur = None
+    item_indent = None
+    stack = []
 
     def flush():
         if cur is not None:
@@ -1326,7 +1295,6 @@ def _clash_proxies_fallback(text):
         indent = len(raw) - len(raw.lstrip(" "))
         stripped = raw.strip()
 
-        # End of the proxies block: a new top-level section.
         if indent == 0 and not stripped.startswith("-") and stripped.endswith(":"):
             break
 
@@ -1349,7 +1317,6 @@ def _clash_proxies_fallback(text):
 
         if cur is None:
             continue
-        # Pop deeper scopes that we have dedented out of.
         while len(stack) > 1 and indent < stack[-1][0]:
             stack.pop()
         k, sep, v = stripped.partition(":")
@@ -1360,13 +1327,11 @@ def _clash_proxies_fallback(text):
 
 
 def _assign(stack, indent, key, value):
-    # Find the container whose child-indent matches this line's indent.
     container = stack[-1][1]
     for ind, cont in stack:
         if indent >= ind:
             container = cont
     if value == "":
-        # Opens a nested mapping.
         child = {}
         container[key] = child
         stack.append((indent + 2, child))
@@ -1526,7 +1491,6 @@ def update(text, need_parse=True):
         return
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    # 1) whole-content base64
     dec = try_b64_text(text)
     if dec is not None:
         update(dec)
@@ -1534,7 +1498,6 @@ def update(text, need_parse=True):
 
     stripped = text.strip()
 
-    # 2) JSON (sing-box / SIP008 / single object)
     try:
         j = json.loads(stripped)
     except Exception:
@@ -1543,32 +1506,26 @@ def update(text, need_parse=True):
         dispatch_json_value(j)
         return
 
-    # 3) Clash
     if re.search(r"(^|\n)\s*proxies\s*:", text):
         update_clash(text)
         return
 
-    # 4) WireGuard file
     if "[Interface]" in text and "[Peer]" in text:
         parse_wg_file(text)
         return
 
-    # 5) multi-line -> Disect, recurse
     if need_parse and "\n" in text:
         for part in disect(text):
             update(part.strip(), False)
         return
 
-    # 6) comments / too short
     if stripped.startswith("//") or stripped.startswith("#") or len(stripped) < 2:
         return
 
-    # 7) json:// link
     if stripped.startswith("json://"):
         parse_json_link(stripped)
         return
 
-    # 8) bare JSON object
     if stripped.startswith("{"):
         try:
             obj = json.loads(stripped)
@@ -1578,12 +1535,11 @@ def update(text, need_parse=True):
             dispatch_json_object(obj)
         return
 
-    # 9) share link
     parse_share_link(stripped)
 
 
 # ---------------------------------------------------------------------------
-# Config builder (sing-box 1.13.x schema)
+# Config builder (sing-box 1.14 schema)
 # ---------------------------------------------------------------------------
 def load_custom_settings(custom_rules_path=None):
     custom_rules_path = custom_rules_path or CUSTOM_RULES_PATH
@@ -1601,19 +1557,22 @@ def build_custom_route_config(custom_rules_path=None):
         with open(custom_rules_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        return [], []
+        return [], [], []
     except Exception as e:
         sys.stderr.write("warning: failed to load custom rules: %s\n" % e)
-        return [], []
+        return [], [], []
 
     if isinstance(data, list):
         data = {"rules": data}
     if not isinstance(data, dict):
-        return [], []
+        return [], [], []
 
     route_rules = []
+    dns_rules = []
     rule_sets = []
     rule_set_tags = set()
+
+    dns_domain_keys = ("domain", "domain_suffix", "domain_keyword", "domain_regex")
 
     for rs in as_list(data.get("rule_sets")):
         if isinstance(rs, dict) and rs.get("tag"):
@@ -1632,9 +1591,10 @@ def build_custom_route_config(custom_rules_path=None):
 
         rule = {}
         action = source_rule.get("action", "route")
+        outbound = source_rule.get("outbound", "proxy")
         rule["action"] = action
         if action == "route":
-            rule["outbound"] = source_rule.get("outbound", "proxy")
+            rule["outbound"] = outbound
 
         for key in (
             "domain",
@@ -1698,15 +1658,42 @@ def build_custom_route_config(custom_rules_path=None):
         if len(rule) > 1:
             route_rules.append(rule)
 
-    return route_rules, rule_sets
+        dns_match = {}
+        for key in dns_domain_keys:
+            values = as_list(source_rule.get(key))
+            if values:
+                dns_match[key] = values
+        dns_sets = custom_sets + geosite_sets
+        if dns_sets:
+            dns_match["rule_set"] = dns_sets
+        if dns_match:
+            if action == "route" and outbound == "direct":
+                dns_rules.append(
+                    {"action": "route", "server": "dns-direct", **dns_match}
+                )
+            elif action == "reject" or outbound in ("block", "reject"):
+                dns_rules.append({"action": "reject", **dns_match})
+
+    return route_rules, rule_sets, dns_rules
+
+
+def _dns_settings():
+    dns = CUSTOM_SETTINGS.get("dns") if isinstance(CUSTOM_SETTINGS, dict) else None
+    return dns if isinstance(dns, dict) else {}
 
 
 def build_config():
+    dns_opts = _dns_settings()
+    fakeip_enabled = bool(dns_opts.get("fakeip", False))
+    remote_dns = dns_opts.get("remote") or "8.8.8.8"
+    dns_strategy = dns_opts.get("strategy", "prefer_ipv4")
+
+    proxy_members = list(ORDER_TAGS)
     selector = {
         "type": "selector",
         "tag": "proxy",
-        "outbounds": list(ORDER_TAGS),
-        "default": ORDER_TAGS[0] if ORDER_TAGS else "",
+        "outbounds": proxy_members,
+        "default": proxy_members[0] if proxy_members else "",
     }
 
     server_domains = []
@@ -1722,6 +1709,8 @@ def build_config():
             if addr and isinstance(addr, str) and not re.match(r"^[\d\.:]+$", addr):
                 if addr not in server_domains:
                     server_domains.append(addr)
+
+    custom_route_rules, custom_rule_sets, custom_dns_rules = build_custom_route_config()
 
     dns_rules = [
         {
@@ -1742,21 +1731,28 @@ def build_config():
 
     if server_domains:
         dns_rules.append(
-            {
-                "action": "route",
-                "domain": server_domains,
-                "domain_keyword": [],
-                "domain_regex": [],
-                "domain_suffix": [],
-                "rule_set": [],
-                "server": "dns-direct",
-                "strategy": "",
-            }
+            {"action": "route", "domain": server_domains, "server": "dns-direct"}
         )
 
-    dns_rules.append({"action": "route", "server": "dns-direct", "strategy": ""})
+    dns_rules.extend(custom_dns_rules)
 
-    custom_route_rules, custom_rule_sets = build_custom_route_config()
+    if fakeip_enabled:
+        dns_rules.append(
+            {
+                "action": "route",
+                "domain_suffix": ["scdn.co", "spotify.com", "spotifycdn.com"],
+                "server": "dns-remote",
+            }
+        )
+        dns_rules.append(
+            {
+                "action": "route",
+                "inbound": "tun-in",
+                "server": "dns-fakeip",
+                "strategy": "ipv4_only",
+                "disable_cache": True,
+            }
+        )
 
     base_route_rules = (
         [
@@ -1764,31 +1760,50 @@ def build_config():
             {"action": "hijack-dns", "inbound": "dns-in", "protocol": "dns"},
             {"action": "reject", "inbound": "dns-in"},
             {"action": "sniff", "inbound": ["mixed-in", "tun-in"]},
+            {
+                "action": "reject",
+                "network": "udp",
+                "port": 443,
+                "domain_suffix": ["scdn.co", "spotify.com", "spotifycdn.com"],
+            },
         ]
         + custom_route_rules
         + [{"action": "hijack-dns", "protocol": "dns"}]
     )
 
+    dns_servers = [
+        {
+            "detour": "proxy",
+            "domain_resolver": "dns-direct",
+            "server": remote_dns,
+            "tag": "dns-remote",
+            "type": "tls",
+        },
+        {"tag": "dns-direct", "type": "local"},
+        {"tag": "dns-local", "type": "local"},
+    ]
+    if fakeip_enabled:
+        dns_servers.append(
+            {
+                "tag": "dns-fakeip",
+                "type": "fakeip",
+                "inet4_range": "198.18.0.0/15",
+                "inet6_range": "fc00::/18",
+            }
+        )
+
     cfg = {
         "certificate": {"store": "system"},
         "dns": {
+            "final": "dns-remote",
+            "strategy": dns_strategy,
             "rules": dns_rules,
-            "servers": [
-                {
-                    "detour": "proxy",
-                    "domain_resolver": "dns-local",
-                    "server": "8.8.8.8",
-                    "tag": "dns-remote",
-                    "type": "tls",
-                },
-                {"domain_resolver": "dns-local", "tag": "dns-direct", "type": "local"},
-                {"tag": "dns-local", "type": "local"},
-            ],
+            "servers": dns_servers,
         },
         "endpoints": ENDPOINTS,
         "experimental": {
             "cache_file": {"enabled": True, "store_fakeip": True, "store_rdrc": True},
-            "clash_api": {"default_mode": ""},
+            "clash_api": {"default_mode": "", "external_controller": "127.0.0.1:9090"},
         },
         "inbounds": [
             {
@@ -1804,7 +1819,7 @@ def build_config():
                 "type": "mixed",
             },
             {
-                "address": ["172.19.0.1/24"],
+                "address": ["172.19.0.1/24", "fdfe:dcba:9876::1/126"],
                 "auto_redirect": True,
                 "auto_route": True,
                 "mtu": 1500,
