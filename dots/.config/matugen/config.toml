@@ -32,3 +32,8 @@ output_path = '~/.local/state/quickshell/user/generated/color.txt'
 [templates.wallpaper]
 input_path = '~/.config/matugen/templates/wallpaper.txt'
 output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
+
+[templates.mpv_modernz]
+input_path = '~/.config/matugen/templates/mpv/modernz-md3.conf'
+output_path = '~/.config/matugen/generated/modernz-md3.conf'
+post_hook = '~/.config/matugen/hooks/modernz-md3.sh'
