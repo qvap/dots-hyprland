@@ -1865,11 +1865,15 @@ def build_config():
 
     dns_servers = [
         {
+            # DoH (port 443) rather than DoT (port 853): some proxy servers
+            # (e.g. grpc-reality nodes) block outbound 853, which breaks all
+            # DNS when FakeIP is off since every query is tunneled through the
+            # selected proxy. 443 is universally allowed and harder to block.
             "detour": "proxy",
             "domain_resolver": "dns-direct",
             "server": remote_dns,
             "tag": "dns-remote",
-            "type": "tls",
+            "type": "https",
         },
         {"tag": "dns-direct", "type": "local"},
         {"tag": "dns-local", "type": "local"},
