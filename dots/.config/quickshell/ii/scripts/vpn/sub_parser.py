@@ -698,6 +698,9 @@ def dispatch_json_value(j):
         return
     if not isinstance(j, dict):
         return
+    if is_xray_group(j):
+        update_xray_group(j)
+        return
     if "outbounds" in j or "endpoints" in j:
         update_singbox(j)
     elif "version" in j and "servers" in j:
@@ -1080,6 +1083,95 @@ def parse_xray_outbound(out, remarks=""):
     if ob.get("type") == "hysteria2":
         apply_hysteria2_tuning(ob, settings, hysteria, stream)
     add_outbound(ob)
+
+
+# ---------------------------------------------------------------------------
+# Xray "Auto Selector" groups: a full Xray config whose routing.balancers
+# pick among several proxy outbounds. Throne represents these as a single
+# auto-selecting node; we mirror that with a sing-box urltest group instead
+# of flattening every member into a separate top-level proxy.
+# ---------------------------------------------------------------------------
+def is_xray_group(j):
+    if not isinstance(j, dict):
+        return False
+    routing = j.get("routing") or {}
+    balancers = routing.get("balancers") if isinstance(routing, dict) else None
+    return isinstance(balancers, list) and len(balancers) > 0
+
+
+def _xray_selector_prefixes(j):
+    prefixes = []
+    routing = j.get("routing") or {}
+    for b in as_list(routing.get("balancers")):
+        if isinstance(b, dict):
+            for s in as_list(b.get("selector")):
+                prefixes.append(str(s))
+    obs = j.get("burstObservatory") or j.get("observatory") or {}
+    if isinstance(obs, dict):
+        for s in as_list(obs.get("subjectSelector")):
+            prefixes.append(str(s))
+    return prefixes
+
+
+def _xray_member_host(item):
+    proto = str(item.get("protocol", "")).lower()
+    settings = item.get("settings", {}) or {}
+    if proto == "vless":
+        server, _port, _user = _xray_vnext_server(settings)
+        return server
+    if proto in ("hysteria", "hysteria2", "hy2"):
+        server, _port = _xray_hysteria_server(settings)
+        return server
+    return ""
+
+
+def _xray_group_interval(j):
+    obs = j.get("burstObservatory") or j.get("observatory") or {}
+    ping = obs.get("pingConfig", {}) if isinstance(obs, dict) else {}
+    interval = ping.get("interval") if isinstance(ping, dict) else None
+    return interval if isinstance(interval, str) and interval.strip() else "3m"
+
+
+def update_xray_group(j):
+    remarks = j.get("remarks", "") or "Auto Selector"
+    prefixes = _xray_selector_prefixes(j)
+    outbounds = j.get("outbounds", []) or []
+
+    member_tags = []
+    for item in outbounds:
+        if not isinstance(item, dict):
+            continue
+        proto = str(item.get("protocol", "")).lower()
+        if proto not in ("vless", "hysteria", "hysteria2", "hy2"):
+            continue
+        tag = str(item.get("tag", ""))
+        if prefixes and not any(tag.startswith(p) for p in prefixes):
+            continue
+        host = _xray_member_host(item)
+        member_name = "%s · %s" % (remarks, host) if host else remarks
+        before = len(OUTBOUNDS)
+        parse_xray_outbound(item, member_name)
+        if len(OUTBOUNDS) > before:
+            member_tags.append(OUTBOUNDS[-1]["tag"])
+
+    if not member_tags:
+        return
+
+    # Members are reachable only through the group, not as standalone picks.
+    for t in member_tags:
+        if t in ORDER_TAGS:
+            ORDER_TAGS.remove(t)
+
+    group = {
+        "type": "urltest",
+        "tag": _uniq_tag(remarks),
+        "outbounds": member_tags,
+        "url": "https://www.gstatic.com/generate_204",
+        "interval": _xray_group_interval(j),
+        "tolerance": 50,
+    }
+    OUTBOUNDS.append(group)
+    ORDER_TAGS.append(group["tag"])
 
 
 # ---------------------------------------------------------------------------
