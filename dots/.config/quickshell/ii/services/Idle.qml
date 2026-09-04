@@ -13,10 +13,18 @@ Singleton {
     property alias inhibit: idleInhibitor.enabled
     inhibit: false
 
+    function syncPersistentState() {
+        if (Persistent.ready) {
+            root.inhibit = Persistent.states.idle.inhibit;
+        }
+    }
+
+    Component.onCompleted: syncPersistentState()
+
     Connections {
         target: Persistent
         function onReadyChanged() {
-            root.inhibit = Persistent.states.idle.inhibit;
+            root.syncPersistentState();
         }
     }
 
