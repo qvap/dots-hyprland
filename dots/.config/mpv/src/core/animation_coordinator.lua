@@ -1,0 +1,273 @@
+local animation_coordinator = {}
+
+function animation_coordinator.new(args)
+  local runtime = args.runtime
+  local service = {}
+  local animations = {
+    runtime.controller.opacity,
+    runtime.window_controls.opacity,
+    runtime.volume.animation,
+    runtime.context_menu.animation,
+    runtime.context_menu.width_animation,
+    runtime.context_menu.height_animation,
+    runtime.chapter.animation,
+    runtime.chapter.fade,
+    runtime.playlist.animation,
+    runtime.playlist.controls_opacity,
+    runtime.playlist.width_animation,
+    runtime.playlist.height_animation,
+    runtime.subtitle.animation,
+    runtime.audio.animation,
+    runtime.settings.animation,
+    runtime.settings.fade,
+    runtime.settings.content_animation,
+    runtime.settings.width_animation,
+    runtime.settings.height_animation,
+    runtime.playback_indicator.opacity,
+    runtime.playback_indicator.scale,
+    runtime.sponsorblock.actions_opacity,
+    runtime.edge_seek.left.opacity,
+    runtime.edge_seek.left.slide,
+    runtime.edge_seek.left.feedback,
+    runtime.edge_seek.right.opacity,
+    runtime.edge_seek.right.slide,
+    runtime.edge_seek.right.feedback,
+    runtime.tooltip.opacity,
+    runtime.tooltip.slide
+  }
+
+  function service:is_running()
+    for _, value in ipairs(animations) do
+      if value:is_running() then return true end
+    end
+    return false
+  end
+
+  function service:recommended_interval(base)
+    if args.needs_display_rate and args.needs_display_rate() then
+      return base
+    end
+    if runtime.volume.animation:is_running() or
+      runtime.context_menu.animation:is_running() or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running() or
+      runtime.playlist.animation:is_running() or
+      runtime.playlist.width_animation:is_running() or
+      runtime.playlist.height_animation:is_running() or
+      runtime.chapter.animation:is_running() or
+      runtime.subtitle.animation:is_running() or
+      runtime.audio.animation:is_running() or
+      runtime.settings.animation:is_running() or
+      runtime.settings.fade:is_running() or
+      runtime.settings.width_animation:is_running() or
+      runtime.settings.height_animation:is_running() then
+      return base
+    end
+    -- Controller fades touch three retained layers, so 45 Hz is a better
+    -- quality/cost point than driving all of them at a 60+ Hz display rate.
+    if runtime.controller.opacity:is_running() then
+      return math.max(base, 1 / 45)
+    end
+    for _, value in ipairs(animations) do
+      if value:is_running() then
+        if value.running or math.abs(value.target - value.value) > 0.015 or
+          math.abs(value.velocity or 0) > 0.35 then
+          return base
+        end
+      end
+    end
+    return math.max(base, 1 / 30)
+  end
+
+  function service:render_mode()
+    if runtime.playlist.controls_opacity:is_running() or
+      runtime.controller.opacity:is_running() then
+      return "visual"
+    end
+    if runtime.window_controls.opacity:is_running() then
+      return "interaction"
+    end
+    if runtime.context_menu.animation:is_running() or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running() then
+      return "interaction"
+    end
+    if runtime.tooltip.requested or
+      runtime.tooltip.opacity.value > 0.001 or
+      runtime.tooltip.opacity:is_running() or
+      runtime.tooltip.slide:is_running() then
+      return "interaction"
+    end
+    if args.empty_state_visible and args.empty_state_visible() then
+      if runtime.playback_indicator.show_on_empty and
+        (runtime.playback_indicator.opacity:is_running() or
+          runtime.playback_indicator.scale:is_running()) then
+        return "interaction"
+      end
+      return "dynamic"
+    end
+    if runtime.volume.animation:is_running() and
+      not (runtime.context_menu.animation:is_running() or
+        runtime.playlist.animation:is_running() or
+        runtime.chapter.animation:is_running() or
+        runtime.subtitle.animation:is_running() or
+        runtime.audio.animation:is_running() or
+        runtime.settings.animation:is_running() or
+        runtime.settings.fade:is_running() or
+        runtime.playback_indicator.opacity:is_running() or
+        runtime.playback_indicator.scale:is_running() or
+        runtime.edge_seek.left.opacity:is_running() or
+        runtime.edge_seek.right.opacity:is_running() or
+        runtime.tooltip.opacity:is_running()) then
+      return "dynamic"
+    end
+    return "interaction"
+  end
+
+  function service:edge_targets()
+    local pointer = runtime.pointer
+    local playback_available = (runtime.snapshot.playlist_count or 0) > 0
+    local controller_bounds = runtime.controller.bounds
+    local window_controls_bounds = runtime.window_controls.bounds
+    local volume_popup_bounds = runtime.volume.popup_bounds
+    local pip_bounds = runtime.pip.bounds
+    local over_controller = (controller_bounds and args.mouse_in(controller_bounds)) or
+      (window_controls_bounds and args.mouse_in(window_controls_bounds)) or
+      (volume_popup_bounds and args.mouse_in(volume_popup_bounds)) or
+      (pip_bounds and args.mouse_in(pip_bounds))
+    local context_visible = runtime.context_menu.open or
+      runtime.context_menu.pending_x ~= nil or
+      runtime.context_menu.animation:is_running() or
+      runtime.context_menu.animation.value > 0.001 or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running()
+    local modal = runtime.update.open or context_visible or runtime.playlist.open or
+      runtime.playlist.animation:is_running() or
+      runtime.chapter.open or runtime.chapter.animation.value > 0.001 or
+      runtime.settings.open or runtime.settings.animation.value > 0.001
+    local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
+      runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
+    local edge_allowed = playback_available and
+      args.single_click_actions_enabled() and
+      not runtime.controller.pointer_timed_out and
+      not edge_modal and not over_controller and
+      pointer.x >= 0 and pointer.y >= args.edge_seek_top_inset()
+    local edge_width = runtime.viewport.w * args.seeking_zone_fraction()
+    return edge_allowed and pointer.x <= edge_width,
+      edge_allowed and pointer.x >= runtime.viewport.w - edge_width
+  end
+
+  function service:pointer_feedback_changed()
+    local wants_left, wants_right = self:edge_targets()
+    return runtime.edge_seek.left.opacity.target ~= (wants_left and 1 or 0) or
+      runtime.edge_seek.right.opacity.target ~= (wants_right and 1 or 0)
+  end
+
+  function service:update(now)
+    runtime.controller.opacity:update(now)
+    local follows_controller = args.show_window_controls_with_controller and
+      args.show_window_controls_with_controller()
+    local window_controls_visible = runtime.window_controls.hovered or
+      (follows_controller and runtime.controller.visible)
+    runtime.window_controls.visible = window_controls_visible
+    runtime.window_controls.opacity:set_target(
+      window_controls_visible and 1 or 0, now,
+      window_controls_visible and 0.12 or 0.18)
+    runtime.window_controls.opacity:update(now)
+    local context_visible = runtime.context_menu.open or
+      runtime.context_menu.pending_x ~= nil or
+      runtime.context_menu.animation:is_running() or
+      runtime.context_menu.animation.value > 0.001 or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running()
+    local modal = runtime.update.open or context_visible or runtime.playlist.open or
+      runtime.playlist.animation:is_running() or
+      runtime.chapter.open or runtime.chapter.animation.value > 0.001 or
+      runtime.settings.open or runtime.settings.animation.value > 0.001
+    if runtime.controller.hide_cursor_after_fade and not modal and
+      not runtime.controller.opacity:is_running() and
+      runtime.controller.opacity.value <= 0.001 then
+      runtime.controller.hide_cursor_after_fade = false
+      args.hide_cursor()
+    end
+    local playback_available = (runtime.snapshot.playlist_count or 0) > 0
+    local wants_volume = playback_available and not modal and
+      (runtime.volume.dragging or
+      (not runtime.controller.pointer_timed_out and
+        ((runtime.volume.button_bounds and
+          args.mouse_in(runtime.volume.button_bounds)) or
+          (runtime.volume.popup_bounds and
+            args.mouse_in(runtime.volume.popup_bounds)))))
+    runtime.volume.animation:set_target(wants_volume and 1 or 0)
+    runtime.volume.animation:update(now)
+
+    runtime.context_menu.animation:set_target(runtime.context_menu.open and 1 or 0)
+    runtime.context_menu.animation:update(now)
+    runtime.context_menu.width_animation:update(now)
+    runtime.context_menu.height_animation:update(now)
+
+    runtime.playlist.animation:set_target(
+      runtime.playlist.open and 1 or 0, now,
+      runtime.playlist.open and 0.12 or 0.18)
+    runtime.playlist.animation:update(now)
+    local position_pill_visible =
+      runtime.seek.position_pill_visible == true
+    runtime.playlist.controls_opacity:set_target(
+      position_pill_visible and not runtime.playlist.open and 0 or 1,
+      now, position_pill_visible and 0.12 or 0.16)
+    runtime.playlist.controls_opacity:update(now)
+
+    for _, name in ipairs({"chapter", "subtitle", "audio", "settings"}) do
+      local state = runtime[name]
+      state.animation:set_target(state.open and 1 or 0)
+      state.animation:update(now)
+    end
+    runtime.chapter.fade:set_target(
+      runtime.chapter.open and 1 or 0, now,
+      runtime.chapter.open and 0.12 or 0.18)
+    runtime.chapter.fade:update(now)
+    runtime.settings.fade:set_target(
+      runtime.settings.open and 1 or 0, now,
+      runtime.settings.open and 0.12 or 0.18)
+    runtime.settings.fade:update(now)
+    runtime.playlist.width_animation:update(now)
+    runtime.playlist.height_animation:update(now)
+    runtime.settings.content_animation:update(now)
+    runtime.settings.width_animation:update(now)
+    runtime.settings.height_animation:update(now)
+    runtime.playback_indicator.opacity:update(now)
+    runtime.playback_indicator.scale:update(now)
+    runtime.sponsorblock.actions_opacity:update(now)
+
+    local wants_left, wants_right = self:edge_targets()
+    for _, item in ipairs({
+      {state = runtime.edge_seek.left, visible = wants_left},
+      {state = runtime.edge_seek.right, visible = wants_right}
+    }) do
+      item.state.opacity:set_target(item.visible and 1 or 0, now, 0.15)
+      item.state.slide:set_target(item.visible and 1 or 0)
+      item.state.opacity:update(now)
+      item.state.slide:update(now)
+      item.state.feedback:update(now)
+    end
+
+    local settings = runtime.settings
+    if settings.transition_phase == "fade_out" and
+      settings.content_animation.value <= 0.25 then
+      settings.page = settings.pending_page or settings.page
+      settings.pending_page, settings.transition_phase = nil, "resize"
+      settings.resize_started = false
+      settings.content_animation:set_target(1, now, 0.12)
+    elseif settings.transition_phase == "resize" and settings.resize_started and
+      not settings.width_animation:is_running() and
+      not settings.height_animation:is_running() and
+      not settings.content_animation:is_running() then
+      settings.transition_phase = nil
+    end
+    args.tooltip:update(now)
+  end
+
+  return service
+end
+
+return animation_coordinator

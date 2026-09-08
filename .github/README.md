@@ -40,6 +40,7 @@
   - **QoL**: screen translation, anti-flashbang, Google Lens
   - **Material themes**: Choose your wallpaper, done, enjoy
   - **Transparent installation**: Every command is shown before it's run
+  - **Integrated material-osc theme for mpv**: Applies a material design theme to mpv using brahmkshatriya's [material-osc](https://github.com/brahmkshatriya/material-osc)
 </details>
 
 <details> 
