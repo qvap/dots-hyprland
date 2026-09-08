@@ -11,11 +11,13 @@ Scope {
 
     function dismiss() {
         GlobalStates.regionSelectorOpen = false
+        root.annotatingScreen = ""
     }
 
     property var action: RegionSelection.SnipAction.Copy
     property var selectionMode: RegionSelection.SelectionMode.RectCorners
-    
+    property string annotatingScreen: "" // monitor that owns the annotation session
+
     Variants {
         model: Quickshell.screens
         delegate: Loader {
@@ -28,8 +30,16 @@ Scope {
                 onDismiss: root.dismiss()
                 action: root.action
                 selectionMode: root.selectionMode
+                otherAnnotating: root.annotatingScreen !== "" && root.annotatingScreen !== regionSelectorLoader.modelData.name
+                onAnnotateStarted: root.annotatingScreen = regionSelectorLoader.modelData.name
             }
         }
+    }
+
+    function edit() {
+        root.action = RegionSelection.SnipAction.Edit
+        root.selectionMode = RegionSelection.SelectionMode.RectCorners
+        GlobalStates.regionSelectorOpen = true
     }
 
     function screenshot() {
@@ -76,6 +86,9 @@ Scope {
         function screenshot() {
             root.screenshot()
         }
+        function edit() {
+            root.edit()
+        }
         function search() {
             root.search()
         }
@@ -94,6 +107,11 @@ Scope {
         name: "regionScreenshot"
         description: "Takes a screenshot of the selected region"
         onPressed: root.screenshot()
+    }
+    GlobalShortcut {
+        name: "regionEdit"
+        description: "Screenshots the selected region and opens the annotation editor"
+        onPressed: root.edit()
     }
     GlobalShortcut {
         name: "regionSearch"
