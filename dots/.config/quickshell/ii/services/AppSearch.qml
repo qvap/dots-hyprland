@@ -58,23 +58,39 @@ Singleton {
         entry: a
     }))
 
+    // ЙЦУКЕН -> QWERTY by physical key. Lets you type "ылнзу" (Russian layout) and find "skype".
+    readonly property var ruToEnLayout: ({
+        "й":"q","ц":"w","у":"e","к":"r","е":"t","н":"y","г":"u","ш":"i","щ":"o","з":"p","х":"[","ъ":"]",
+        "ф":"a","ы":"s","в":"d","а":"f","п":"g","р":"h","о":"j","л":"k","д":"l","ж":";","э":"'",
+        "я":"z","ч":"x","с":"c","м":"v","и":"b","т":"n","ь":"m","б":",","ю":".","ё":"`"
+    })
+    function translateLayout(str) {
+        return str.toLowerCase().split("").map(c => root.ruToEnLayout[c] ?? c).join("");
+    }
+
     function fuzzyQuery(search: string): var { // Idk why list<DesktopEntry> doesn't work
+        const translated = translateLayout(search);
         if (root.sloppySearch) {
             const results = list.map(obj => ({
                 entry: obj,
-                score: Levendist.computeScore(obj.name.toLowerCase(), search.toLowerCase())
+                score: Math.max(
+                    Levendist.computeScore(obj.name.toLowerCase(), search.toLowerCase()),
+                    Levendist.computeScore(obj.name.toLowerCase(), translated))
             })).filter(item => item.score > root.scoreThreshold)
                 .sort((a, b) => b.score - a.score)
             return results
                 .map(item => item.entry)
         }
 
-        return Fuzzy.go(search, preppedNames, {
-            all: true,
-            key: "name"
-        }).map(r => {
-            return r.obj.entry
-        });
+        const queries = (translated !== search.toLowerCase()) ? [search, translated] : [search];
+        const best = new Map();
+        for (const q of queries) {
+            Fuzzy.go(q, preppedNames, { all: true, key: "name" }).forEach(r => {
+                const e = r.obj.entry;
+                if (!best.has(e) || best.get(e) < r.score) best.set(e, r.score);
+            });
+        }
+        return [...best.keys()].sort((a, b) => best.get(b) - best.get(a));
     }
 
     function iconExists(iconName) {
