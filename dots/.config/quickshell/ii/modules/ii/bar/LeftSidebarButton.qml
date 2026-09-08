@@ -32,7 +32,8 @@ RippleButton {
     Connections {
         target: Ai
         function onResponseFinished() {
-            if (GlobalStates.sidebarLeftOpen) return;
+            if (GlobalStates.sidebarLeftOpen)
+                return;
             root.showPing = true;
         }
     }
@@ -40,7 +41,8 @@ RippleButton {
     Connections {
         target: Booru
         function onResponseFinished() {
-            if (GlobalStates.sidebarLeftOpen) return;
+            if (GlobalStates.sidebarLeftOpen)
+                return;
             root.showPing = true;
         }
     }
