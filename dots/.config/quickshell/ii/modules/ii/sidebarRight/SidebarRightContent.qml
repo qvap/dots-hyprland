@@ -44,7 +44,6 @@ Item {
                 root.showAudioInputDialog = false;
             }
         }
-
     }
 
     Process {
@@ -55,11 +54,11 @@ Item {
             id: fileChooserOutput
         }
 
-        onExited: (code) => {
+        onExited: code => {
             if (code === 0) {
-                const path = fileChooserOutput.text.trim()
+                const path = fileChooserOutput.text.trim();
                 if (path !== "")
-                    Config.options.sidebar.bannerImage = path
+                    Config.options.sidebar.bannerImage = path;
             }
         }
     }
@@ -120,9 +119,7 @@ Item {
                                 StyledImage {
                                     anchors.fill: parent
                                     fillMode: Image.PreserveAspectCrop
-                                    source: Config.options.sidebar.bannerImage !== ""
-                                        ? Config.options.sidebar.bannerImage
-                                        : Config.options.background.wallpaperPath
+                                    source: Config.options.sidebar.bannerImage !== "" ? Config.options.sidebar.bannerImage : Config.options.background.wallpaperPath
                                     cache: false
                                     antialiasing: true
                                     sourceSize.width: wallpaperRect.width * 2
@@ -141,12 +138,12 @@ Item {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onClicked: (event) => {
+                                    onClicked: event => {
                                         if (event.button === Qt.LeftButton) {
-                                            fileChooser.running = true
-                                            GlobalStates.sidebarRightOpen = false
+                                            fileChooser.running = true;
+                                            GlobalStates.sidebarRightOpen = false;
                                         } else if (event.button === Qt.RightButton) {
-                                            Config.options.sidebar.bannerImage = ""
+                                            Config.options.sidebar.bannerImage = "";
                                         }
                                     }
                                 }
@@ -171,9 +168,7 @@ Item {
                                     Image {
                                         id: avatarImage
                                         anchors.fill: parent
-                                        source: Config.options.profile.avatarPath !== ""
-                                            ? "file://" + Config.options.profile.avatarPicture
-                                            : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
+                                        source: Config.options.profile.avatarPath !== "" ? "file://" + Config.options.profile.avatarPicture : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
                                         sourceSize.width: avatarImage.width * 2
                                         sourceSize.height: avatarImage.height * 2
                                         fillMode: Image.PreserveAspectCrop
@@ -187,7 +182,7 @@ Item {
                                         }
                                         onStatusChanged: {
                                             if (status === Image.Error)
-                                                visible = false
+                                                visible = false;
                                         }
                                     }
 
@@ -201,9 +196,7 @@ Item {
                                 }
 
                                 StyledText {
-                                    text: (Config.options.profile.displayName === ""
-                                        ? SystemInfo.username
-                                        : Config.options.profile.displayName) + "@" + SystemInfo.hostname
+                                    text: (Config.options.profile.displayName === "" ? SystemInfo.username : Config.options.profile.displayName) + "@" + SystemInfo.hostname
                                     font.pixelSize: Appearance.font.pixelSize.small
                                     font.weight: Font.DemiBold
                                     color: Appearance.colors.colOnLayer1
@@ -232,18 +225,15 @@ Item {
                                     buttonIcon: "edit"
                                     onClicked: root.editMode = !root.editMode
                                     StyledToolTip {
-                                        text: Translation.tr("Edit quick toggles")
-                                            + (root.editMode
-                                                ? Translation.tr("\nLMB to enable/disable\nRMB to toggle size\nScroll to swap position")
-                                                : "")
+                                        text: Translation.tr("Edit quick toggles") + (root.editMode ? Translation.tr("\nLMB to enable/disable\nRMB to toggle size\nScroll to swap position") : "")
                                     }
                                 }
                                 QuickToggleButton {
                                     toggled: false
                                     buttonIcon: "restart_alt"
                                     onClicked: {
-                                        Quickshell.execDetached(["hyprctl", "reload"])
-                                        Quickshell.reload(true)
+                                        Quickshell.execDetached(["hyprctl", "reload"]);
+                                        Quickshell.reload(true);
                                     }
                                     StyledToolTip {
                                         text: Translation.tr("Reload Hyprland & Quickshell")
@@ -253,8 +243,8 @@ Item {
                                     toggled: false
                                     buttonIcon: "settings"
                                     onClicked: {
-                                        GlobalStates.sidebarRightOpen = false
-                                        Quickshell.execDetached(["qs", "-p", root.settingsQmlPath])
+                                        GlobalStates.sidebarRightOpen = false;
+                                        Quickshell.execDetached(["qs", "-p", root.settingsQmlPath]);
                                     }
                                     StyledToolTip {
                                         text: Translation.tr("Settings")
@@ -289,9 +279,11 @@ Item {
                 Layout.fillWidth: true
                 visible: active
                 active: {
-                    const configQuickSliders = Config.options.sidebar.quickSliders
-                    if (!configQuickSliders.enable) return false
-                    if (!configQuickSliders.showMic && !configQuickSliders.showVolume && !configQuickSliders.showBrightness) return false;
+                    const configQuickSliders = Config.options.sidebar.quickSliders;
+                    if (!configQuickSliders.enable)
+                        return false;
+                    if (!configQuickSliders.showMic && !configQuickSliders.showVolume && !configQuickSliders.showBrightness)
+                        return false;
                     return true;
                 }
                 sourceComponent: QuickSliders {}
@@ -310,8 +302,10 @@ Item {
             }
 
             CenterWidgetGroup {
+                quietNotifs: root.editMode
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillHeight: true
+                Layout.minimumHeight: 46
                 Layout.fillWidth: true
             }
 
@@ -360,7 +354,8 @@ Item {
         shownPropertyString: "showWifiDialog"
         dialog: WifiDialog {}
         onShownChanged: {
-            if (!shown) return;
+            if (!shown)
+                return;
             Network.enableWifi();
             Network.rescanWifi();
         }
@@ -378,7 +373,8 @@ Item {
         readonly property bool shown: root[shownPropertyString]
         anchors.fill: parent
 
-        onShownChanged: if (shown) toggleDialogLoader.active = true;
+        onShownChanged: if (shown)
+            toggleDialogLoader.active = true
         active: shown
         onActiveChanged: {
             if (active) {
@@ -389,11 +385,12 @@ Item {
         Connections {
             target: toggleDialogLoader.item
             function onDismiss() {
-                toggleDialogLoader.item.show = false
+                toggleDialogLoader.item.show = false;
                 root[toggleDialogLoader.shownPropertyString] = false;
             }
             function onVisibleChanged() {
-                if (!toggleDialogLoader.item.visible && !root[toggleDialogLoader.shownPropertyString]) toggleDialogLoader.active = false;
+                if (!toggleDialogLoader.item.visible && !root[toggleDialogLoader.shownPropertyString])
+                    toggleDialogLoader.active = false;
             }
         }
     }
@@ -442,7 +439,7 @@ Item {
             radius: height / 2
             implicitWidth: uptimeRow.implicitWidth + 24
             implicitHeight: uptimeRow.implicitHeight + 8
-            
+
             Row {
                 id: uptimeRow
                 anchors.centerIn: parent
@@ -489,7 +486,7 @@ Item {
                 toggled: false
                 buttonIcon: "restart_alt"
                 onClicked: {
-                    Quickshell.execDetached(["hyprctl", "reload"])
+                    Quickshell.execDetached(["hyprctl", "reload"]);
                     Quickshell.reload(true);
                 }
                 StyledToolTip {

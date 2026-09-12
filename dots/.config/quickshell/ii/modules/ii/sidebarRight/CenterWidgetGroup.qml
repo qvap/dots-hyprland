@@ -9,11 +9,13 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
+    property bool quietNotifs: false
     radius: Appearance.rounding.normal
     color: Appearance.colors.colLayer1
 
     NotificationList {
         anchors.fill: parent
         anchors.margins: 5
+        quiet: root.quietNotifs
     }
 }

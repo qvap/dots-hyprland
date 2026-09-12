@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs.modules.common.widgets
+import qs.modules.common
 import qs.services
 import QtQuick
 import Quickshell
@@ -11,6 +12,10 @@ StyledListView { // Scrollable window
 
     spacing: 3
 
+    Behavior on opacity {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
+
     model: ScriptModel {
         values: root.popup ? Notifications.popupAppNameList : Notifications.appNameList
     }
@@ -19,8 +24,6 @@ StyledListView { // Scrollable window
         required property var modelData
         popup: root.popup
         width: ListView.view.width // https://doc.qt.io/qt-6/qml-qtquick-listview.html
-        notificationGroup: popup ? 
-            Notifications.popupGroupsByAppName[modelData] :
-            Notifications.groupsByAppName[modelData]
+        notificationGroup: popup ? Notifications.popupGroupsByAppName[modelData] : Notifications.groupsByAppName[modelData]
     }
 }

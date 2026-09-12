@@ -8,9 +8,11 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    property bool quiet: false
 
     NotificationListView { // Scrollable window
         id: listview
+        opacity: root.quiet ? 0 : 1
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -32,7 +34,7 @@ Item {
 
     // Placeholder when list is empty
     PagePlaceholder {
-        shown: Notifications.list.length === 0
+        shown: Notifications.list.length === 0 && !root.quiet
         icon: "notifications_active"
         description: Translation.tr("Nothing")
         shape: MaterialShape.Shape.Ghostish
@@ -64,7 +66,7 @@ Item {
             Layout.fillWidth: false
             buttonIcon: "delete_sweep"
             onClicked: () => {
-                Notifications.discardAllNotifications()
+                Notifications.discardAllNotifications();
             }
         }
     }
