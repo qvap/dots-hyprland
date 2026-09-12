@@ -89,7 +89,7 @@ ApplicationWindow {
     minimumWidth: 750
     minimumHeight: 500
     width: 1100
-    height: 750
+    height: 800
     color: Appearance.m3colors.m3background
 
     ColumnLayout {
