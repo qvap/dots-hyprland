@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -19,14 +21,13 @@ ContentPage {
                 onSelected: newValue => {
                     Config.options.cheatsheet.superKey = newValue;
                 }
+
                 // Use a nerdfont to see the icons
-                options: ([
-                  "󰖳", "", "󰨡", "", "󰌽", "󰣇", "", "", "", 
-                  "", "", "󱄛", "", "", "", "⌘", "󰀲", "󰟍", ""
-                ]).map(icon => { return {
-                  displayName: icon,
-                  value: icon
-                  }
+                options: (["󰖳", "", "󰨡", "", "󰌽", "󰣇", "", "", "", "", "", "󱄛", "", "", "", "⌘", "󰀲", "󰟍", ""]).map(icon => {
+                    return {
+                        displayName: icon,
+                        value: icon
+                    };
                 })
             }
         }
@@ -51,7 +52,7 @@ ContentPage {
                 Config.options.cheatsheet.useFnSymbol = checked;
             }
             StyledToolTip {
-              text: Translation.tr("e.g. 󱊫 for F1, 󱊶  for F12")
+                text: Translation.tr("e.g. 󱊫 for F1, 󱊶  for F12")
             }
         }
         ConfigSwitch {
@@ -62,7 +63,7 @@ ContentPage {
                 Config.options.cheatsheet.useMouseSymbol = checked;
             }
             StyledToolTip {
-              text: Translation.tr("Replace 󱕐   for \"Scroll ↓\", 󱕑   \"Scroll ↑\", L󰍽   \"LMB\", R󰍽   \"RMB\", 󱕒   \"Scroll ↑/↓\" and ⇞/⇟ for \"Page_↑/↓\"")
+                text: Translation.tr("Replace 󱕐   for \"Scroll ↓\", 󱕑   \"Scroll ↑\", L󰍽   \"LMB\", R󰍽   \"RMB\", 󱕒   \"Scroll ↑/↓\" and ⇞/⇟ for \"Page_↑/↓\"")
             }
         }
         ConfigSwitch {
@@ -75,7 +76,6 @@ ContentPage {
             StyledToolTip {
                 text: Translation.tr("Display modifiers and keys in multiple keycap (e.g., \"Ctrl + A\" instead of \"Ctrl A\" or \"󰘴 + A\" instead of \"󰘴 A\")")
             }
-
         }
 
         ConfigSpinBox {
@@ -404,18 +404,26 @@ ContentPage {
                 }
             }
         }
-        
+
         ContentSubsection {
             title: Translation.tr("Google Lens")
-            
+
             ConfigSelectionArray {
                 currentValue: Config.options.search.imageSearch.useCircleSelection ? "circle" : "rectangles"
                 onSelected: newValue => {
                     Config.options.search.imageSearch.useCircleSelection = (newValue === "circle");
                 }
                 options: [
-                    { icon: "activity_zone", value: "rectangles", displayName: Translation.tr("Rectangular selection") },
-                    { icon: "gesture", value: "circle", displayName: Translation.tr("Circle to Search") }
+                    {
+                        icon: "activity_zone",
+                        value: "rectangles",
+                        displayName: Translation.tr("Rectangular selection")
+                    },
+                    {
+                        icon: "gesture",
+                        value: "circle",
+                        displayName: Translation.tr("Circle to Search")
+                    }
                 ]
             }
         }
@@ -435,7 +443,7 @@ ContentPage {
 
         ContentSubsection {
             title: Translation.tr("Circle selection")
-            
+
             ConfigSpinBox {
                 icon: "eraser_size_3"
                 text: Translation.tr("Stroke width")
@@ -489,7 +497,7 @@ ContentPage {
 
         ContentSubsection {
             title: Translation.tr("Quick toggles")
-            
+
             ConfigSelectionArray {
                 Layout.fillWidth: false
                 currentValue: Config.options.sidebar.quickToggles.style
@@ -535,7 +543,7 @@ ContentPage {
                     Config.options.sidebar.quickSliders.enable = checked;
                 }
             }
-            
+
             ConfigSwitch {
                 buttonIcon: "brightness_6"
                 text: Translation.tr("Brightness")
@@ -628,7 +636,7 @@ ContentPage {
                     }
                 }
             }
-            
+
             ConfigRow {
                 uniform: true
                 ConfigSwitch {
@@ -769,7 +777,7 @@ ContentPage {
             ConfigSelectionArray {
                 currentValue: Config.options.overview.orderRightLeft
                 onSelected: newValue => {
-                    Config.options.overview.orderRightLeft = newValue
+                    Config.options.overview.orderRightLeft = newValue;
                 }
                 options: [
                     {
@@ -787,7 +795,7 @@ ContentPage {
             ConfigSelectionArray {
                 currentValue: Config.options.overview.orderBottomUp
                 onSelected: newValue => {
-                    Config.options.overview.orderBottomUp = newValue
+                    Config.options.overview.orderBottomUp = newValue;
                 }
                 options: [
                     {
@@ -928,5 +936,4 @@ ContentPage {
             }
         }
     }
-
 }

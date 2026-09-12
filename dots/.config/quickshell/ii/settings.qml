@@ -34,6 +34,11 @@ ApplicationWindow {
             component: "modules/settings/GeneralConfig.qml"
         },
         {
+            name: Translation.tr("Profile"),
+            icon: "person",
+            component: "modules/settings/ProfileConfig.qml"
+        },
+        {
             name: Translation.tr("Bar"),
             icon: "toast",
             iconRotation: 180,

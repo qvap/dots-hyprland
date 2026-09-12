@@ -5,10 +5,12 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 
-Flow {
+RowLayout {
     id: root
     Layout.fillWidth: true
-    spacing: 2
+    Layout.leftMargin: 8
+    Layout.rightMargin: 8
+    spacing: 10
     property list<var> options: [
         {
             "displayName": "Option 1",
@@ -22,37 +24,60 @@ Flow {
         },
     ]
     property var currentValue: null
+    property string text: ""
+    property string icon: ""
 
     function focusSelectedChild() {
-        children.find(c => c.value == currentValue).forceActiveFocus()
+        optionsFlow.children.find(c => c.value == currentValue).forceActiveFocus()
     }
 
     signal selected(var newValue)
 
-    Repeater {
-        model: root.options
-        delegate: SelectionGroupButton {
-            id: paletteButton
-            required property var modelData
-            required property int index
-            readonly property var value: modelData.value
-            onYChanged: {
-                if (index === 0) {
-                    paletteButton.leftmost = true
-                } else {
-                    var prev = root.children[index - 1]
-                    var thisIsOnNewLine = prev && prev.y !== paletteButton.y
-                    paletteButton.leftmost = thisIsOnNewLine
-                    prev.rightmost = thisIsOnNewLine
+    OptionalMaterialSymbol {
+        icon: root.icon
+        opacity: root.enabled ? 1 : 0.4
+    }
+
+    StyledText {
+        text: root.text
+        color: Appearance.colors.colOnSecondaryContainer
+        opacity: root.enabled ? 1 : 0.4
+    }
+
+    Item {
+        Layout.fillWidth: true
+    }
+
+    Flow {
+        id: optionsFlow
+        Layout.fillWidth: true
+        spacing: 2
+
+        Repeater {
+            model: root.options
+            delegate: SelectionGroupButton {
+                id: paletteButton
+                required property var modelData
+                required property int index
+                readonly property var value: modelData.value
+                onYChanged: {
+                    if (index === 0) {
+                        paletteButton.leftmost = true
+                    } else {
+                        var prev = optionsFlow.children[index - 1]
+                        var thisIsOnNewLine = prev && prev.y !== paletteButton.y
+                        paletteButton.leftmost = thisIsOnNewLine
+                        prev.rightmost = thisIsOnNewLine
+                    }
                 }
-            }
-            leftmost: index === 0
-            rightmost: index === root.options.length - 1
-            buttonIcon: modelData.icon || ""
-            buttonText: modelData.displayName
-            toggled: root.currentValue == modelData.value
-            onClicked: {
-                root.selected(modelData.value);
+                leftmost: index === 0
+                rightmost: index === root.options.length - 1
+                buttonIcon: modelData.icon || ""
+                buttonText: modelData.displayName
+                toggled: root.currentValue == modelData.value
+                onClicked: {
+                    root.selected(modelData.value);
+                }
             }
         }
     }

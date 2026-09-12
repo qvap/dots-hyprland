@@ -264,6 +264,7 @@ ContentPage {
                         }
                     ]
                 }
+
             }
             ContentSubsection {
                 title: Translation.tr("Bar style")

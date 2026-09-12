@@ -33,7 +33,30 @@ Singleton {
     property string wifiStatus: "disconnected"
 
     property string networkName: ""
-    property int networkStrength: active?.strength ?? 0
+    property int networkStrength
+    property string networkInterface: ""
+    property string ipAddress: ""
+    property string publicIpAddress: ""
+    property string gateway: ""
+    property string macAddress: ""
+    property string materialSymbol: root.ethernet
+        ? "lan"
+        : (root.wifiEnabled && root.wifiStatus === "connected")
+            ? (
+                (root.active?.strength ?? 0) > 83 ? "signal_wifi_4_bar" :
+                (root.active?.strength ?? 0) > 67 ? "network_wifi" :
+                (root.active?.strength ?? 0) > 50 ? "network_wifi_3_bar" :
+                (root.active?.strength ?? 0) > 33 ? "network_wifi_2_bar" :
+                (root.active?.strength ?? 0) > 17 ? "network_wifi_1_bar" :
+                "signal_wifi_0_bar"
+            )
+            : (root.wifiStatus === "connecting")
+                ? "signal_wifi_statusbar_not_connected"
+                : (root.wifiStatus === "disconnected")
+                    ? "wifi_find"
+                    : (root.wifiStatus === "disabled")
+                        ? "signal_wifi_off"
+                        : "signal_wifi_bad"
 
     // Control
     function enableWifi(enabled = true): void {
@@ -139,6 +162,9 @@ Singleton {
         updateConnectionType.startCheck();
         wifiStatusProcess.running = true
         updateNetworkName.running = true;
+        updateNetworkStrength.running = true;
+        updateNetworkDetails.running = true;
+        updatePublicIp.running = true;
     }
 
     Process {
@@ -207,6 +233,66 @@ Singleton {
         stdout: SplitParser {
             onRead: data => {
                 root.networkName = data;
+            }
+        }
+    }
+
+    Process {
+        id: updateNetworkStrength
+        running: true
+        command: ["sh", "-c", "nmcli -f IN-USE,SIGNAL,SSID device wifi | awk '/^\\*/{if (NR!=1) {print $2}}'"]
+        stdout: SplitParser {
+            onRead: data => {
+                root.networkStrength = parseInt(data);
+            }
+        }
+    }
+
+    Process {
+        id: updateNetworkDetails
+        running: true
+        command: ["sh", "-c", "device=$(nmcli -t -f DEVICE,TYPE,STATE device status | awk -F: '$3 == \"connected\" && $2 ~ /^(wifi|ethernet)$/ { print $1; exit }'); if [ -n \"$device\" ]; then nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR,IP4.ADDRESS,IP4.GATEWAY device show \"$device\"; fi"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let networkInterface = "";
+                let ipAddress = "";
+                let gateway = "";
+                let macAddress = "";
+
+                for (const line of text.trim().split("\n")) {
+                    const separator = line.indexOf(":");
+                    if (separator < 0) continue;
+
+                    const key = line.slice(0, separator);
+                    const value = line.slice(separator + 1);
+                    if (key === "GENERAL.DEVICE")
+                        networkInterface = value;
+                    else if (key === "GENERAL.HWADDR")
+                        macAddress = value;
+                    else if (key.startsWith("IP4.ADDRESS") && ipAddress === "")
+                        ipAddress = value.split("/")[0];
+                    else if (key === "IP4.GATEWAY")
+                        gateway = value;
+                }
+
+                root.networkInterface = networkInterface;
+                root.ipAddress = ipAddress;
+                root.gateway = gateway;
+                root.macAddress = macAddress;
+            }
+        }
+    }
+
+    Process {
+        id: updatePublicIp
+        running: true
+        command: ["curl", "-fsS", "--max-time", "5", "https://api.ipify.org"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const candidate = text.trim();
+                root.publicIpAddress = /^[0-9a-fA-F:.]+$/.test(candidate)
+                    ? candidate
+                    : "";
             }
         }
     }

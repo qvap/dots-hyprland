@@ -10,8 +10,7 @@ import Quickshell.Wayland
 Singleton {
     id: root
 
-    property alias inhibit: idleInhibitor.enabled
-    inhibit: false
+    property bool inhibit: false
 
     function syncPersistentState() {
         if (Persistent.ready) {
@@ -28,17 +27,23 @@ Singleton {
         }
     }
 
+    onInhibitChanged: {
+        if (Persistent.ready && Persistent.states.idle.inhibit !== root.inhibit) {
+            Persistent.states.idle.inhibit = root.inhibit;
+        }
+    }
+
     function toggleInhibit(active = null) {
         if (active !== null) {
             root.inhibit = active;
         } else {
             root.inhibit = !root.inhibit;
         }
-        Persistent.states.idle.inhibit = root.inhibit;
     }
 
     IdleInhibitor {
         id: idleInhibitor
+        enabled: root.inhibit
         window: PanelWindow {
             // Inhibitor requires a "visible" surface
             // Actually not lol

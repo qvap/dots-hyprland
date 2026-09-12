@@ -11,7 +11,6 @@ Singleton {
     id: root
     property bool available: UPower.displayDevice.isLaptopBattery
     property var chargeState: UPower.displayDevice.state
-    property bool knownEnergyRate: energyRate != 0 && (chargeState == UPowerDeviceState.Charging || chargeState == UPowerDeviceState.Discharging)
     property bool isCharging: chargeState == UPowerDeviceState.Charging
     property bool isPluggedIn: isCharging || chargeState == UPowerDeviceState.PendingCharge
     property real percentage: UPower.displayDevice?.percentage ?? 1
@@ -50,6 +49,16 @@ Singleton {
         return 0;
     })()
 
+    property int chargeCycles: (function() {
+        const devList = UPower.devices.values;
+        for (let i = 0; i < devList.length; ++i) {
+            const dev = devList[i];
+            if (dev.isLaptopBattery) {
+                return dev.chargeCycles ?? -1
+            }
+        }
+        return -1
+    })()
 
     onIsLowAndNotChargingChanged: {
         if (!root.available || !isLowAndNotCharging) return;

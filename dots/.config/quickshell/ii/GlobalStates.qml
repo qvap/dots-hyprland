@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import qs.modules.common.functions
 pragma Singleton
 pragma ComponentBehavior: Bound
 
@@ -30,6 +31,24 @@ Singleton {
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
     property bool workspaceShowNumbers: false
+    property list<real> visualizerPoints: []
+
+    Process {
+        id: cavaProc
+        running: MprisController.players.length > 0
+        onRunningChanged: {
+            if (!running)
+                root.visualizerPoints = [];
+        }
+        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
+        stdout: SplitParser {
+            onRead: data => {
+                root.visualizerPoints = data.split(";")
+                    .map(value => parseFloat(value.trim()))
+                    .filter(value => !isNaN(value));
+            }
+        }
+    }
 
     onSidebarRightOpenChanged: {
         if (GlobalStates.sidebarRightOpen) {

@@ -8,6 +8,7 @@ ColumnLayout {
     id: root
     property string title
     property string icon: ""
+    property var shape
     property alias color: contentTitle.color
     property alias iconColor: iconSymbol.color
     default property alias contentData: sectionContent.data

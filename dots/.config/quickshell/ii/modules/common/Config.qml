@@ -161,6 +161,14 @@ Singleton {
                 }
             }
 
+            property JsonObject profile: JsonObject {
+                property string avatarPath: ""
+                property string avatarPicture: ""
+                property string descriptionText: "::distro::"
+                property string displayName: ""
+                property bool onlinePresets: false
+            }
+
             property JsonObject apps: JsonObject {
                 property string bluetooth: "kcmshell6 kcm_bluetooth"
                 property string changePassword: "kitty -1 --hold=yes fish -i -c 'passwd'"
@@ -248,20 +256,41 @@ Singleton {
                 property bool bottom: false // Instead of top
                 property int cornerStyle: 0 // 0: Hug | 1: Float | 2: Plain rectangle
                 property bool floatStyleShadow: true // Show shadow behind bar when cornerStyle == 1 (Float)
-                property bool borderless: false // true for no grouping of items
+                property string borderless: "pills" // pills, separated, segmented, transparent
+                property string groupColor: "layer1"
+                property bool followFrameColor: false
+                property string frameColor: "black"
+                property bool centerOnlyReserveFrame: false
+                property bool showFrame: false
+                property real frameThickness: 4
                 property string topLeftIcon: "spark" // Options: "distro" or any icon name in ~/.config/quickshell/ii/assets/icons
+                property bool centerOnWorkspaces: false
                 property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
                 property bool showBackground: true
                 property bool verbose: true
                 property bool vertical: false
+                property JsonObject divider: JsonObject {
+                    property string style: "rect"
+                    property int spacing: 20
+                }
+                property JsonObject layouts: JsonObject {
+                    property list<string> leftLayout: ["launcherButton", "workspaces", "activeWindow"]
+                    property list<string> middleLayout: ["clockWidget"]
+                    property list<string> rightLayout: ["sysTray", "utilButtons", "systemIcons", "powerButton"]
+                }
                 property JsonObject indicators: JsonObject {
                     property JsonObject notifications: JsonObject {
                         property bool showUnreadCount: false
                     }
                 }
                 property JsonObject resources: JsonObject {
+                    property string style: "filled"
+                    property bool showValue: false
                     property bool alwaysShowSwap: true
                     property bool alwaysShowCpu: true
+                    property bool alwaysShowCpuTemp: false
+                    property bool alwaysShowDisk: false
+                    property bool alwaysShowRam: true
                     property int memoryWarningThreshold: 95
                     property int swapWarningThreshold: 85
                     property int cpuWarningThreshold: 90
@@ -271,12 +300,14 @@ Singleton {
                 }
                 property JsonObject utilButtons: JsonObject {
                     property bool showScreenSnip: true
-                    property bool showColorPicker: false
+                    property bool showColorPicker: true
                     property bool showMicToggle: false
-                    property bool showKeyboardToggle: true
-                    property bool showDarkModeToggle: true
+                    property bool showKeyboardToggle: false
+                    property bool showWallpaperToggle: true
+                    property bool showDarkModeToggle: false
                     property bool showPerformanceProfileToggle: false
                     property bool showScreenRecord: false
+                    property bool isRecording: false
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
@@ -288,11 +319,19 @@ Singleton {
                 property JsonObject workspaces: JsonObject {
                     property bool monochromeIcons: true
                     property int shown: 10
-                    property bool showAppIcons: true
-                    property bool alwaysShowNumbers: false
+                    property bool showAppIcons: false
+                    property string indicatorStyle: "dot"
+                    property bool alwaysShowNumbers: true
                     property int showNumberDelay: 300 // milliseconds
                     property list<string> numberMap: ["1", "2"] // Characters to show instead of numbers on workspace indicator
                     property bool useNerdFont: false
+                }
+                property JsonObject media: JsonObject {
+                    property string preferredPlayer: ""
+                    property bool alwaysVisible: false
+                    property bool onlyTitle: false
+                    property int maxWidth: 280
+                    property int minWidth: 100
                 }
             }
 
@@ -512,6 +551,8 @@ Singleton {
             }
 
             property JsonObject sidebar: JsonObject {
+                property bool banner: true
+                property string bannerImage: ""
                 property bool keepRightSidebarLoaded: true
                 property JsonObject translator: JsonObject {
                     property bool enable: false
@@ -598,6 +639,7 @@ Singleton {
             property JsonObject time: JsonObject {
                 // https://doc.qt.io/qt-6/qtime.html#toString
                 property string format: "hh:mm"
+                property bool showDate: true
                 property string shortDateFormat: "dd/MM"
                 property string dateWithYearFormat: "dd/MM/yyyy"
                 property string dateFormat: "ddd, dd/MM"
