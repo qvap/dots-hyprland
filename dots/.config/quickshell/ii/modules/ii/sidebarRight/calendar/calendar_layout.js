@@ -1,12 +1,12 @@
-const weekDays = [ // MONDAY IS THE FIRST DAY OF THE WEEK :HESRIGHTYOUKNOW:
-    { day: 'Mo', today: 0 },
-    { day: 'Tu', today: 0 },
-    { day: 'We', today: 0 },
-    { day: 'Th', today: 0 },
-    { day: 'Fr', today: 0 },
-    { day: 'Sa', today: 0 },
-    { day: 'Su', today: 0 },
-]
+const weekDayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function getWeekDays(firstDayOfWeek) {
+    const firstDay = ((firstDayOfWeek ?? 1) % 7 + 7) % 7;
+    return Array.from({ length: 7 }, (_, index) => ({
+        day: weekDayNames[(firstDay + index) % 7],
+        today: 0
+    }));
+}
 
 function checkLeapYear(year) {
     return (
@@ -60,9 +60,10 @@ function getDateInXMonthsTime(x) {
     return targetDate;
 }
 
-function getCalendarLayout(dateObject, highlight) {
+function getCalendarLayout(dateObject, highlight, firstDayOfWeek) {
     if (!dateObject) dateObject = new Date();
-    const weekday = (dateObject.getDay() + 6) % 7; // MONDAY IS THE FIRST DAY OF THE WEEK
+    const firstDay = ((firstDayOfWeek ?? 1) % 7 + 7) % 7;
+    const weekday = (dateObject.getDay() - firstDay + 7) % 7;
     const day = dateObject.getDate();
     const month = dateObject.getMonth() + 1;
     const year = dateObject.getFullYear();

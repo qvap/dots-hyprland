@@ -9,8 +9,9 @@ Item {
     // Layout.topMargin: 10
     anchors.topMargin: 10
     property int monthShift: 0
+    property int firstDayOfWeek: Config.options?.time?.firstDayOfWeek ?? 1
     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
-    property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0)
+    property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0, firstDayOfWeek)
     width: calendarColumn.width
     implicitHeight: calendarColumn.height + 10 * 2
 
@@ -90,7 +91,7 @@ Item {
             Layout.fillHeight: false
             spacing: 5
             Repeater {
-                model: CalendarLayout.weekDays
+                model: CalendarLayout.getWeekDays(firstDayOfWeek)
                 delegate: CalendarDayButton {
                     day: Translation.tr(modelData.day)
                     isToday: modelData.today

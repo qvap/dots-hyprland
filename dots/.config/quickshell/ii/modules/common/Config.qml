@@ -650,6 +650,7 @@ Singleton {
                     property int longBreak: 900
                 }
                 property bool secondPrecision: false
+                property int firstDayOfWeek: 1 // 0 - Sunday, 1 - Monday and etc.
             }
 
             property JsonObject updates: JsonObject {

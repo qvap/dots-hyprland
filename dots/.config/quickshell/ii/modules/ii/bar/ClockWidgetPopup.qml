@@ -9,9 +9,11 @@ StyledPopup {
     property var today: new Date()
 
     function usageColor(value) {
-        if (value > 0.9) return Appearance.colors.colError
-        if (value > 0.6) return Appearance.m3colors.m3tertiary
-        return Appearance.colors.colPrimary
+        if (value > 0.9)
+            return Appearance.colors.colError;
+        if (value > 0.6)
+            return Appearance.m3colors.m3tertiary;
+        return Appearance.colors.colPrimary;
     }
 
     ColumnLayout {
@@ -45,25 +47,22 @@ StyledPopup {
                     required property int index
 
                     readonly property var date: {
-                        const today = root.today
-                        const dow = today.getDay()
-                        const d = new Date(today)
-                        d.setDate(today.getDate() - dow + index)
-                        return d
+                        const today = root.today;
+                        const firstDay = Config.options?.time?.firstDayOfWeek ?? 1;
+                        const dayOffset = (today.getDay() - firstDay + 7) % 7;
+                        const d = new Date(today);
+                        d.setDate(today.getDate() - dayOffset + index);
+                        return d;
                     }
                     readonly property bool isToday: {
-                        const t = root.today
-                        return date.getDate()     === t.getDate() &&
-                               date.getMonth()    === t.getMonth() &&
-                               date.getFullYear() === t.getFullYear()
+                        const t = root.today;
+                        return date.getDate() === t.getDate() && date.getMonth() === t.getMonth() && date.getFullYear() === t.getFullYear();
                     }
 
                     Layout.fillWidth: true
                     height: 56
                     radius: Appearance.rounding.normal
-                    color: isToday
-                        ? Appearance.colors.colPrimaryContainer
-                        : Appearance.colors.colSurfaceContainerHigh
+                    color: isToday ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
 
                     ColumnLayout {
                         anchors.centerIn: parent
@@ -73,22 +72,16 @@ StyledPopup {
                             Layout.alignment: Qt.AlignHCenter
                             text: Qt.locale().toString(date, "ddd").slice(0, 2)
                             font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: isToday
-                                ? Appearance.colors.colPrimary
-                                : Appearance.colors.colOnSurfaceVariant
+                            color: isToday ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                             font.weight: isToday ? Font.Bold : Font.Normal
                         }
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
                             text: date.getDate()
-                            font.pixelSize: isToday
-                                ? Appearance.font.pixelSize.normal
-                                : Appearance.font.pixelSize.small
+                            font.pixelSize: isToday ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.small
                             font.weight: isToday ? Font.Bold : Font.Normal
-                            color: isToday
-                                ? Appearance.colors.colPrimary
-                                : Appearance.colors.colOnLayer1
+                            color: isToday ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                         }
                     }
                 }
@@ -141,10 +134,10 @@ StyledPopup {
 
                         width: parent.width
                         height: 32
-                        topLeftRadius:     isFirst ? bigRadius : smallRadius
-                        topRightRadius:    isFirst ? bigRadius : smallRadius
-                        bottomLeftRadius:  isLast  ? bigRadius : smallRadius
-                        bottomRightRadius: isLast  ? bigRadius : smallRadius
+                        topLeftRadius: isFirst ? bigRadius : smallRadius
+                        topRightRadius: isFirst ? bigRadius : smallRadius
+                        bottomLeftRadius: isLast ? bigRadius : smallRadius
+                        bottomRightRadius: isLast ? bigRadius : smallRadius
                         color: Appearance.colors.colSurfaceContainerHigh
 
                         StyledText {

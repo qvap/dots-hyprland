@@ -336,6 +336,54 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "calendar_month"
+        title: Translation.tr("Calendar")
+
+        ContentSubsection {
+            title: Translation.tr("First day of week")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.time.firstDayOfWeek
+
+                onSelected: newValue => {
+                    Config.options.time.firstDayOfWeek = newValue;
+                }
+
+                options: [
+                    {
+                        displayName: Translation.tr("Monday"),
+                        value: 1
+                    },
+                    {
+                        displayName: Translation.tr("Tuesday"),
+                        value: 2
+                    },
+                    {
+                        displayName: Translation.tr("Wednesday"),
+                        value: 3
+                    },
+                    {
+                        displayName: Translation.tr("Thursday"),
+                        value: 4
+                    },
+                    {
+                        displayName: Translation.tr("Friday"),
+                        value: 5
+                    },
+                    {
+                        displayName: Translation.tr("Saturday"),
+                        value: 6
+                    },
+                    {
+                        displayName: Translation.tr("Sunday"),
+                        value: 0
+                    },
+                ]
+            }
+        }
+    }
+
+    ContentSection {
         icon: "work_alert"
         title: Translation.tr("Work safety")
 
