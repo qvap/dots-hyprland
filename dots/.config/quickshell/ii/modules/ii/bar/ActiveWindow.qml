@@ -23,25 +23,24 @@ Item {
 
     property string activeAppClass: {
         if (!root.focusingThisMonitor || !root.activeWindow?.activated)
-            return root.biggestWindow?.class ?? ""
-        return root.activeWindow?.appId ?? root.biggestWindow?.class ?? ""
+            return root.biggestWindow?.class ?? "";
+        return root.activeWindow?.appId ?? root.biggestWindow?.class ?? "";
     }
 
     property var mainAppIconSource: {
         if (!root.activeAppClass || root.activeAppClass === "")
-            return Quickshell.iconPath("user-desktop", "image-missing")
-        return Quickshell.iconPath(AppSearch.guessIcon(root.activeAppClass), 
-            Quickshell.iconPath("user-desktop", "image-missing"))     // ← fallback Desktop
+            return Quickshell.iconPath("user-desktop", "image-missing");
+        return Quickshell.iconPath(AppSearch.guessIcon(root.activeAppClass), Quickshell.iconPath("user-desktop", "image-missing"));     // ← fallback Desktop
     }
 
     Component.onCompleted: {
-        console.log("appId:", root.activeWindow?.appId)
-        console.log("class:", root.biggestWindow?.class)
-        console.log("guessIcon:", AppSearch.guessIcon(root.activeAppClass))
-        console.log("iconPath:", root.mainAppIconSource)
+        console.log("appId:", root.activeWindow?.appId);
+        console.log("class:", root.biggestWindow?.class);
+        console.log("guessIcon:", AppSearch.guessIcon(root.activeAppClass));
+        console.log("iconPath:", root.mainAppIconSource);
     }
 
-    implicitWidth:  vertical ? Appearance.sizes.verticalBarWidth : Math.min(colLayout.implicitWidth + 6, 280)
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : Math.min(colLayout.implicitWidth + 24, 280)
     implicitHeight: vertical ? iconItem.implicitHeight : Appearance.sizes.barHeight
 
     // Vertical
@@ -64,10 +63,13 @@ Item {
     ColumnLayout {
         id: colLayout
         visible: !root.vertical
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 3
+        anchors {
+            verticalCenter: parent.verticalCenter
+            left: parent.left
+            right: parent.right
+            leftMargin: 12
+            rightMargin: 12
+        }
         spacing: -4
 
         StyledText {
@@ -75,18 +77,14 @@ Item {
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
             elide: Text.ElideRight
-            text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ?
-                root.activeWindow?.appId :
-                (root.biggestWindow?.class) ?? Translation.tr("Desktop")
+            text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? root.activeWindow?.appId : (root.biggestWindow?.class) ?? Translation.tr("Desktop")
         }
         StyledText {
             Layout.fillWidth: true
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnLayer0
             elide: Text.ElideRight
-            text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ?
-                root.activeWindow?.title :
-                (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${WM.activeWorkspaceForMonitor(monitor?.name)?.id ?? 1}`
+            text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? root.activeWindow?.title : (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${WM.activeWorkspaceForMonitor(monitor?.name)?.id ?? 1}`
         }
     }
 }

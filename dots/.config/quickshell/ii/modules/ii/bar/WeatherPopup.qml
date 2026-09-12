@@ -56,7 +56,7 @@ StyledPopup {
                     }
 
                     StyledText {
-                        text: Weather.data?.description ?? "Cloudy"
+                        text: Translation.tr(Weather.data?.description) ?? Translation.tr("Cloudy")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Appearance.colors.colOnLayer0
                         opacity: 0.6
@@ -144,7 +144,7 @@ StyledPopup {
             Layout.fillWidth: true
 
             WeatherCard {
-                title: Translation.tr("Rain?")
+                title: Translation.tr("Rain")
                 symbol: "rainy"
                 value: Weather.data?.cr ?? "24%"
             }

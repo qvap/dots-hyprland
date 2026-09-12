@@ -190,7 +190,7 @@ Item {
         // Left
         Item {
             anchors.left: parent.left
-            anchors.leftMargin: root.isMaterial ? (Config.options.hyprland.general.gapsOut || 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 8)
+            anchors.leftMargin: root.isMaterial ? (Config.options?.hyprland?.general?.gapsOut ?? 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 8)
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: root.isMaterial ? leftMaterialPill.implicitWidth : leftRow.implicitWidth
@@ -224,9 +224,20 @@ Item {
                             paintMaterialPill: root.shouldPaintMaterialPill(modelData)
                             bgColor: root.getMaterialPillColor(modelData)
                             Loader {
+                                id: leftMaterialWidgetLoader
                                 Layout.fillHeight: true
+                                property real loadedWidth: 0
+                                Layout.preferredWidth: loadedWidth
                                 source: root.getWidgetUrl(modelData)
+                                Connections {
+                                    target: leftMaterialWidgetLoader.item
+                                    function onImplicitWidthChanged() {
+                                        leftMaterialWidgetLoader.loadedWidth = target.implicitWidth
+                                    }
+                                }
                                 onLoaded: {
+                                    loadedWidth = item?.implicitWidth ?? 0
+                                    Qt.callLater(() => loadedWidth = item?.implicitWidth ?? 0)
                                     if (modelData === "visualizer" && item)
                                         item.mirrored = root.getMirroredForIndex(root.effectiveLeftLayout, index)
                                 }
@@ -323,9 +334,20 @@ Item {
                             paintMaterialPill: root.shouldPaintMaterialPill(modelData)
                             bgColor: root.getMaterialPillColor(modelData)
                             Loader {
+                                id: centerMaterialWidgetLoader
                                 Layout.fillHeight: true
+                                property real loadedWidth: 0
+                                Layout.preferredWidth: loadedWidth
                                 source: root.getWidgetUrl(modelData)
+                                Connections {
+                                    target: centerMaterialWidgetLoader.item
+                                    function onImplicitWidthChanged() {
+                                        centerMaterialWidgetLoader.loadedWidth = target.implicitWidth
+                                    }
+                                }
                                 onLoaded: {
+                                    loadedWidth = item?.implicitWidth ?? 0
+                                    Qt.callLater(() => loadedWidth = item?.implicitWidth ?? 0)
                                     if (modelData === "visualizer" && item)
                                         item.mirrored = root.getMirroredForIndex(root.effectiveMiddleLayout, index)
                                 }
@@ -385,7 +407,7 @@ Item {
         // Right
         Item {
             anchors.right: parent.right
-            anchors.rightMargin: root.isMaterial ? (Config.options.hyprland.general.gapsOut || 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 8)
+            anchors.rightMargin: root.isMaterial ? (Config.options?.hyprland?.general?.gapsOut ?? 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 8)
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: root.isMaterial ? rightMaterialPill.implicitWidth : rightRow.implicitWidth
@@ -419,9 +441,20 @@ Item {
                             paintMaterialPill: root.shouldPaintMaterialPill(modelData)
                             bgColor: root.getMaterialPillColor(modelData)
                             Loader {
+                                id: rightMaterialWidgetLoader
                                 Layout.fillHeight: true
+                                property real loadedWidth: 0
+                                Layout.preferredWidth: loadedWidth
                                 source: root.getWidgetUrl(modelData)
+                                Connections {
+                                    target: rightMaterialWidgetLoader.item
+                                    function onImplicitWidthChanged() {
+                                        rightMaterialWidgetLoader.loadedWidth = target.implicitWidth
+                                    }
+                                }
                                 onLoaded: {
+                                    loadedWidth = item?.implicitWidth ?? 0
+                                    Qt.callLater(() => loadedWidth = item?.implicitWidth ?? 0)
                                     if (modelData === "visualizer" && item)
                                         item.mirrored = root.getMirroredForIndex(root.effectiveRightLayout, index)
                                 }

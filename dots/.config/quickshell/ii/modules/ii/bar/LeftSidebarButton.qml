@@ -17,8 +17,8 @@ RippleButton {
 
     visible: aiChatEnabled || translatorEnabled || animeEnabled
 
-    implicitWidth: 32
-    implicitHeight: 32
+    implicitWidth: isMaterial ? 32 : 24
+    implicitHeight: isMaterial ? 32 : 24
 
     buttonRadius: Appearance.rounding.full
     colBackground: isMaterial ? Appearance.colors.colPrimaryContainer : "transparent"
@@ -36,14 +36,16 @@ RippleButton {
     Connections {
         target: Ai
         function onResponseFinished() {
-            if (GlobalStates.sidebarLeftOpen) return;
+            if (GlobalStates.sidebarLeftOpen)
+                return;
             root.showPing = true;
         }
     }
     Connections {
         target: Booru
         function onResponseFinished() {
-            if (GlobalStates.sidebarLeftOpen) return;
+            if (GlobalStates.sidebarLeftOpen)
+                return;
             root.showPing = true;
         }
     }
@@ -59,12 +61,8 @@ RippleButton {
         anchors.centerIn: parent
         width: 20
         height: 20
-        source: Config.options.bar.topLeftIcon === "distro"
-            ? SystemInfo.distroIcon
-            : `${Config.options.bar.topLeftIcon}-symbolic`
-        colorize: Config.options.bar.topLeftIcon === "distro"
-            ? Config.options.custom.colorizeIcon
-            : true
+        source: Config.options.bar.topLeftIcon === "distro" ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
+        colorize: Config.options.bar.topLeftIcon === "distro" ? Config.options.custom.colorizeIcon : true
         color: Appearance.colors.colOnLayer0
 
         Rectangle {
