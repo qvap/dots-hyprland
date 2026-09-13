@@ -4,17 +4,25 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-/**
- * A nice wrapper for date and time strings.
- */
 Singleton {
     id: root
 
     property bool inhibit: false
+    property bool ready: false
+
+    Timer {
+        id: startupTimer
+        interval: 1500
+        running: true
+        repeat: false
+        onTriggered: {
+            root.ready = true;
+        }
+    }
 
     function syncPersistentState() {
         if (Persistent.ready) {
-            root.inhibit = Persistent.states.idle.inhibit;
+            root.inhibit = Persistent.states?.idle?.inhibit ?? false;
         }
     }
 
@@ -28,12 +36,13 @@ Singleton {
     }
 
     onInhibitChanged: {
-        if (Persistent.ready && Persistent.states.idle.inhibit !== root.inhibit) {
+        if (Persistent.ready && Persistent.states?.idle && Persistent.states.idle.inhibit !== root.inhibit) {
             Persistent.states.idle.inhibit = root.inhibit;
         }
     }
 
     function toggleInhibit(active = null) {
+        root.ready = true;
         if (active !== null) {
             root.inhibit = active;
         } else {
@@ -43,19 +52,29 @@ Singleton {
 
     IdleInhibitor {
         id: idleInhibitor
-        enabled: root.inhibit
+        enabled: root.inhibit && root.ready
+
         window: PanelWindow {
-            // Inhibitor requires a "visible" surface
-            // Actually not lol
-            implicitWidth: 0
-            implicitHeight: 0
+            id: inhibitorWindow
+
+            implicitWidth: 1
+            implicitHeight: 1
             color: "transparent"
-            // Just in case...
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Background
+            WlrLayershell.namespace: "quickshell:idleInhibitor"
+
             anchors {
                 right: true
                 bottom: true
             }
-            // Make it not interactable
+
+            Rectangle { // what the fuck is this? am i stupid?
+                width: 1
+                height: 1
+                color: "transparent"
+            }
+
             mask: Region {
                 item: null
             }
