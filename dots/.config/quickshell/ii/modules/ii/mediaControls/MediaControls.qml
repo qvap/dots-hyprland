@@ -17,7 +17,15 @@ Scope {
     property bool visible: false
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property var realPlayers: MprisController.players
-    readonly property var meaningfulPlayers: filterDuplicatePlayers(realPlayers)
+    readonly property var meaningfulPlayers: {
+        const preferred = Config.options.bar.media.preferredPlayer.trim().toLowerCase();
+        if (preferred.length === 0)
+            return filterDuplicatePlayers(realPlayers);
+        const filtered = realPlayers.filter(p => (p.identity ?? "").toLowerCase().includes(preferred) || (p.desktopEntry ?? "").toLowerCase().includes(preferred));
+        if (filtered.length === 0)
+            return filterDuplicatePlayers(realPlayers);
+        return filterDuplicatePlayers(filtered);
+    }
     readonly property real osdWidth: Appearance.sizes.osdWidth
     readonly property real widgetWidth: Appearance.sizes.mediaControlsWidth
     readonly property real widgetHeight: Appearance.sizes.mediaControlsHeight
@@ -64,25 +72,43 @@ Scope {
         command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
         stdout: SplitParser {
             onRead: data => {
-                // Parse `;`-separated values into the visualizerPoints array
                 let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
                 root.visualizerPoints = points;
             }
         }
     }
 
-    Loader {
-        id: mediaControlsLoader
-        active: GlobalStates.mediaControlsOpen
-        onActiveChanged: {
-            if (!mediaControlsLoader.active && root.realPlayers.length === 0) {
-                GlobalStates.mediaControlsOpen = false;
+    // lazy fix for broken exit animation
+    Timer {
+        id: unloadTimer
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (!GlobalStates.mediaControlsOpen) {
+                mediaControlsLoader.active = false;
             }
         }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onMediaControlsOpenChanged() {
+            if (GlobalStates.mediaControlsOpen) {
+                unloadTimer.stop();
+                mediaControlsLoader.active = true;
+            } else {
+                unloadTimer.restart();
+            }
+        }
+    }
+
+    Loader {
+        id: mediaControlsLoader
+        active: false
 
         sourceComponent: PanelWindow {
             id: panelWindow
-            visible: true
+            visible: GlobalStates.mediaControlsOpen
 
             exclusionMode: ExclusionMode.Ignore
             exclusiveZone: 0
@@ -97,23 +123,81 @@ Scope {
                 left: !(Config.options.bar.vertical && Config.options.bar.bottom)
                 right: Config.options.bar.vertical && Config.options.bar.bottom
             }
+
+            property real lastCalculatedLeft: (panelWindow.screen.width / 2) - (widgetWidth / 2)
+            property real lastCalculatedTop: (panelWindow.screen.height / 2) - (widgetHeight * 1.5)
+
+            readonly property real calculatedLeftMargin: {
+                if (Config.options.bar.vertical) {
+                    return Appearance.sizes.barHeight;
+                }
+
+                const wx = GlobalStates.mediaWidgetX;
+                const ww = GlobalStates.mediaWidgetWidth;
+
+                if (GlobalStates.mediaControlsOpen && !isNaN(wx) && wx > 0 && !isNaN(ww) && ww > 0) {
+                    let widgetCenter = wx + (ww / 2);
+                    let targetLeft = widgetCenter - (root.widgetWidth / 2);
+
+                    let minLeft = Appearance.sizes.hyprlandGapsOut;
+                    let maxLeft = panelWindow.screen.width - root.widgetWidth - Appearance.sizes.hyprlandGapsOut;
+                    lastCalculatedLeft = Math.max(minLeft, Math.min(maxLeft, targetLeft));
+                }
+
+                return lastCalculatedLeft;
+            }
+
+            readonly property real calculatedTopMargin: {
+                if (!Config.options.bar.vertical) {
+                    return Appearance.sizes.barHeight;
+                }
+
+                const wy = GlobalStates.mediaWidgetY;
+                const wh = GlobalStates.mediaWidgetHeight;
+
+                if (GlobalStates.mediaControlsOpen && !isNaN(wy) && wy > 0 && !isNaN(wh) && wh > 0) {
+                    let widgetCenter = wy + (wh / 2);
+                    let targetTop = widgetCenter - (playerColumnLayout.implicitHeight / 2);
+
+                    let minTop = Appearance.sizes.hyprlandGapsOut;
+                    let maxTop = panelWindow.screen.height - playerColumnLayout.implicitHeight - Appearance.sizes.hyprlandGapsOut;
+                    lastCalculatedTop = Math.max(minTop, Math.min(maxTop, targetTop));
+                }
+
+                return lastCalculatedTop;
+            }
+
             margins {
-                top: Config.options.bar.vertical ? ((panelWindow.screen.height / 2) - widgetHeight * 1.5) : Appearance.sizes.barHeight
+                top: panelWindow.calculatedTopMargin
                 bottom: Appearance.sizes.barHeight
-                left: Config.options.bar.vertical ? Appearance.sizes.barHeight : ((panelWindow.screen.width / 2) - (osdWidth / 2) - widgetWidth)
+                left: panelWindow.calculatedLeftMargin
                 right: Appearance.sizes.barHeight
             }
 
             mask: Region {
-                item: playerColumnLayout
+                item: GlobalStates.mediaControlsOpen ? playerColumnLayout : null
             }
 
             Component.onCompleted: {
-                GlobalFocusGrab.addDismissable(panelWindow);
+                if (GlobalStates.mediaControlsOpen) {
+                    GlobalFocusGrab.addDismissable(panelWindow);
+                }
             }
             Component.onDestruction: {
                 GlobalFocusGrab.removeDismissable(panelWindow);
             }
+
+            Connections {
+                target: GlobalStates
+                function onMediaControlsOpenChanged() {
+                    if (GlobalStates.mediaControlsOpen) {
+                        GlobalFocusGrab.addDismissable(panelWindow);
+                    } else {
+                        GlobalFocusGrab.removeDismissable(panelWindow);
+                    }
+                }
+            }
+
             Connections {
                 target: GlobalFocusGrab
                 function onDismissed() {
@@ -124,7 +208,7 @@ Scope {
             ColumnLayout {
                 id: playerColumnLayout
                 anchors.fill: parent
-                spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
+                spacing: -Appearance.sizes.elevationMargin
 
                 Repeater {
                     model: ScriptModel {
@@ -192,17 +276,17 @@ Scope {
         target: "mediaControls"
 
         function toggle(): void {
-            mediaControlsLoader.active = !mediaControlsLoader.active;
-            if (mediaControlsLoader.active)
+            GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+            if (GlobalStates.mediaControlsOpen)
                 Notifications.timeoutAll();
         }
 
         function close(): void {
-            mediaControlsLoader.active = false;
+            GlobalStates.mediaControlsOpen = false;
         }
 
         function open(): void {
-            mediaControlsLoader.active = true;
+            GlobalStates.mediaControlsOpen = true;
             Notifications.timeoutAll();
         }
     }

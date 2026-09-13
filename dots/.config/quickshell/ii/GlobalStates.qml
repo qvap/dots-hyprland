@@ -1,3 +1,5 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
 import qs.modules.common
 import qs.services
 import QtQuick
@@ -5,8 +7,6 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import qs.modules.common.functions
-pragma Singleton
-pragma ComponentBehavior: Bound
 
 Singleton {
     id: root
@@ -15,6 +15,12 @@ Singleton {
     property bool sidebarLeftOpen: false
     property bool sidebarRightOpen: false
     property bool mediaControlsOpen: false
+
+    property real mediaWidgetX: -1
+    property real mediaWidgetY: -1
+    property real mediaWidgetWidth: 0
+    property real mediaWidgetHeight: 0
+
     property bool osdBrightnessOpen: false
     property bool osdVolumeOpen: false
     property bool oskOpen: false
@@ -43,9 +49,7 @@ Singleton {
         command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
         stdout: SplitParser {
             onRead: data => {
-                root.visualizerPoints = data.split(";")
-                    .map(value => parseFloat(value.trim()))
-                    .filter(value => !isNaN(value));
+                root.visualizerPoints = data.split(";").map(value => parseFloat(value.trim())).filter(value => !isNaN(value));
             }
         }
     }
@@ -62,10 +66,10 @@ Singleton {
         description: "Hold to show workspace numbers, release to show icons"
 
         onPressed: {
-            root.superDown = true
+            root.superDown = true;
         }
         onReleased: {
-            root.superDown = false
+            root.superDown = false;
         }
     }
 }

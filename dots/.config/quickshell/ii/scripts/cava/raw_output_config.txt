@@ -1,7 +1,8 @@
 [general]
 mode = waves
-framerate = 60
+framerate = 144
 autosens = 1
+sensitivity = 300
 bars = 50
 
 [output]
@@ -13,5 +14,3 @@ mono_option = average
 
 [smoothing]
 noise_reduction = 20
-
-

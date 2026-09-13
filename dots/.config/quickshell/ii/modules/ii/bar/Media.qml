@@ -15,74 +15,94 @@ import Quickshell.Services.Mpris
 
 Item {
     id: root
-    
+
     property bool vertical: false
     property bool borderless: Config.options.bar.borderless
     property bool isMaterial: Config.options.bar.cornerStyle === 3
     readonly property MprisPlayer activePlayer: {
-        const preferred = Config.options.bar.media.preferredPlayer.trim().toLowerCase()
-        if (preferred.length === 0) return MprisController.activePlayer
-        const _ = MprisController.players.count
+        const preferred = Config.options.bar.media.preferredPlayer.trim().toLowerCase();
+        if (preferred.length === 0)
+            return MprisController.activePlayer;
+        const _ = MprisController.players.count;
         for (const p of MprisController.players) {
-            if ((p.identity ?? "").toLowerCase().includes(preferred) ||
-                (p.desktopEntry ?? "").toLowerCase().includes(preferred))
-                return p
+            if ((p.identity ?? "").toLowerCase().includes(preferred) || (p.desktopEntry ?? "").toLowerCase().includes(preferred))
+                return p;
         }
-        return MprisController.activePlayer
+        return MprisController.activePlayer;
     }
 
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
 
-    property var    artUrl:      activePlayer?.trackArtUrl ?? ""
-    property string trackTitle:  activePlayer?.trackTitle  ?? ""
+    property var artUrl: activePlayer?.trackArtUrl ?? ""
+    property string trackTitle: activePlayer?.trackTitle ?? ""
     property string trackArtist: activePlayer?.trackArtist ?? ""
-    property bool   isPlaying:   activePlayer?.isPlaying   ?? false
-    property bool   hasTrack:    trackTitle.length > 0
+    property bool isPlaying: activePlayer?.isPlaying ?? false
+    property bool hasTrack: trackTitle.length > 0
 
     property string artDownloadLocation: Directories.coverArt
-    property string artFileName:         Qt.md5(artUrl)
-    property string artFilePath:         `${artDownloadLocation}/${artFileName}`
-    property bool   artDownloaded:       false
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property bool artDownloaded: false
 
     property string displayedArtFilePath: {
-        if (!root.artDownloaded) return ""
-        if (root.artUrl.startsWith("file://")) return root.artUrl
-        return Qt.resolvedUrl(artFilePath)
+        if (!root.artDownloaded)
+            return "";
+        if (root.artUrl.startsWith("file://"))
+            return root.artUrl;
+        return Qt.resolvedUrl(artFilePath);
     }
 
     onArtFilePathChanged: {
         if (!root.artUrl || root.artUrl.length === 0) {
-            root.artDownloaded = false
-            return
+            root.artDownloaded = false;
+            return;
         }
         if (root.artUrl.startsWith("file://")) {
-            root.artDownloaded = true
-            return
+            root.artDownloaded = true;
+            return;
         }
-        artDownloader.targetFile  = root.artUrl
-        artDownloader.artFilePath = root.artFilePath
-        root.artDownloaded = false
-        artDownloader.running = true
+        artDownloader.targetFile = root.artUrl;
+        artDownloader.artFilePath = root.artFilePath;
+        root.artDownloaded = false;
+        artDownloader.running = true;
+    }
+
+    function updateWidgetPosition() {
+        if (root.width <= 0)
+            return;
+
+        let rootItem = root.Window?.contentItem ?? null;
+        let pos = rootItem ? root.mapToItem(rootItem, 0, 0) : Qt.point(0, 0);
+
+        if (pos.x > 0 || pos.y > 0) {
+            GlobalStates.mediaWidgetX = pos.x;
+            GlobalStates.mediaWidgetY = pos.y;
+            GlobalStates.mediaWidgetWidth = root.width;
+            GlobalStates.mediaWidgetHeight = root.height;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onMediaControlsOpenChanged() {
+            if (GlobalStates.mediaControlsOpen) {
+                root.updateWidgetPosition();
+            }
+        }
     }
 
     Process {
         id: artDownloader
-        property string targetFile:  root.artUrl
+        property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
-        command: ["bash", "-c",
-            `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
-        onExited: { root.artDownloaded = true }
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
+        onExited: {
+            root.artDownloaded = true;
+        }
     }
 
     Layout.fillHeight: true
-    implicitWidth: vertical 
-        ? Appearance.sizes.verticalBarWidth 
-        : (isMaterial 
-            ? materialRow.implicitWidth 
-            : Math.max(
-                Config.options.bar.media.minWidth,
-                Math.min(rowLayout.implicitWidth + 8, Config.options.bar.media.maxWidth)
-            ))
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : (isMaterial ? materialRow.implicitWidth : Math.max(Config.options.bar.media.minWidth, Math.min(rowLayout.implicitWidth + 8, Config.options.bar.media.maxWidth)))
     implicitHeight: vertical ? (isMaterial ? 32 : mediaCircProg.implicitHeight + 12) : Appearance.sizes.barHeight
 
     Timer {
@@ -96,11 +116,18 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton | Qt.RightButton | Qt.LeftButton
         hoverEnabled: !Config.options.bar.tooltips.clickToShow
-        onPressed: (event) => {
-            if (event.button === Qt.MiddleButton)      activePlayer?.togglePlaying()
-            else if (event.button === Qt.BackButton)   activePlayer?.previous()
-            else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton) activePlayer?.next()
-            else if (event.button === Qt.LeftButton)   GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen
+        onPressed: event => {
+            if (event.button === Qt.MiddleButton)
+                activePlayer?.togglePlaying();
+            else if (event.button === Qt.BackButton)
+                activePlayer?.previous();
+            else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton)
+                activePlayer?.next();
+            else if (event.button === Qt.LeftButton) {
+                if (GlobalStates.mediaControlsOpen)
+                    root.updateWidgetPosition();
+                GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+            }
         }
     }
 
@@ -139,7 +166,7 @@ Item {
         radius: Appearance.rounding.full
         implicitWidth: 32
         implicitHeight: 32
-        
+
         MaterialSymbol {
             anchors.centerIn: parent
             fill: 1
@@ -202,7 +229,7 @@ Item {
             anchors.centerIn: parent
             spacing: 6
 
-            // No platyer 
+            // No platyer
             Loader {
                 active: !root.hasTrack
                 visible: active
@@ -231,15 +258,13 @@ Item {
                         Image {
                             id: avatarImage
                             anchors.fill: parent
-                            source: Config.options.profile.avatarPath !== "" 
-                                ? "file://" + Config.options.profile.avatarPicture 
-                                : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
+                            source: Config.options.profile.avatarPath !== "" ? "file://" + Config.options.profile.avatarPicture : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
                             sourceSize.width: avatarRect.width * 2
                             sourceSize.height: avatarRect.height * 2
                             fillMode: Image.PreserveAspectCrop
                             onStatusChanged: {
                                 if (status === Image.Error)
-                                    visible = false
+                                    visible = false;
                             }
                         }
 
@@ -330,20 +355,37 @@ Item {
                     ColumnLayout {
                         spacing: -4
                         Layout.alignment: Qt.AlignVCenter
-                        Layout.topMargin: 2
+                        Layout.topMargin: Config.options.bar.media.onlyTitle ? 0 : 2
 
                         StyledText {
                             id: artistText
                             text: root.trackArtist
+                            visible: !Config.options.bar.media.onlyTitle
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colOnSecondaryContainer
                             elide: Text.ElideRight
                             Layout.maximumWidth: 120
                             Behavior on text {
                                 SequentialAnimation {
-                                    NumberAnimation { target: artistText; property: "x"; to: -artistText.width; duration: 150; easing.type: Easing.InQuad }
-                                    PropertyAction { target: artistText; property: "text" }
-                                    NumberAnimation { target: artistText; property: "x"; from: artistText.width; to: 0; duration: 150; easing.type: Easing.OutQuad }
+                                    NumberAnimation {
+                                        target: artistText
+                                        property: "x"
+                                        to: -artistText.width
+                                        duration: 150
+                                        easing.type: Easing.InQuad
+                                    }
+                                    PropertyAction {
+                                        target: artistText
+                                        property: "text"
+                                    }
+                                    NumberAnimation {
+                                        target: artistText
+                                        property: "x"
+                                        from: artistText.width
+                                        to: 0
+                                        duration: 150
+                                        easing.type: Easing.OutQuad
+                                    }
                                 }
                             }
                         }
@@ -354,13 +396,29 @@ Item {
                             font.pixelSize: Appearance.font.pixelSize.smallie
                             color: Appearance.colors.colOnSecondaryContainer
                             elide: Text.ElideRight
-                            opacity: 0.7
+                            opacity: Config.options.bar.media.onlyTitle ? 1 : 0.7
                             Layout.maximumWidth: 120
                             Behavior on text {
                                 SequentialAnimation {
-                                    NumberAnimation { target: titleText; property: "x"; to: -artistText.width; duration: 150; easing.type: Easing.InQuad }
-                                    PropertyAction { target: titleText; property: "text" }
-                                    NumberAnimation { target: titleText; property: "x"; from: artistText.width; to: 0; duration: 150; easing.type: Easing.OutQuad }
+                                    NumberAnimation {
+                                        target: titleText
+                                        property: "x"
+                                        to: -artistText.width
+                                        duration: 150
+                                        easing.type: Easing.InQuad
+                                    }
+                                    PropertyAction {
+                                        target: titleText
+                                        property: "text"
+                                    }
+                                    NumberAnimation {
+                                        target: titleText
+                                        property: "x"
+                                        from: artistText.width
+                                        to: 0
+                                        duration: 150
+                                        easing.type: Easing.OutQuad
+                                    }
                                 }
                             }
                         }

@@ -95,4 +95,30 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "motion_play"
+        title: Translation.tr("Media")
+
+        ConfigSwitch {
+            buttonIcon: "format_quote"
+            text: Translation.tr("Only title")
+            checked: Config.options.bar.media.onlyTitle
+            onCheckedChanged: Config.options.bar.media.onlyTitle = checked
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Preferred player")
+
+            MaterialTextArea {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("e.g. spotify, firefox")
+                text: Config.options.bar.media.preferredPlayer
+                wrapMode: TextEdit.Wrap
+                onTextChanged: {
+                    Config.options.bar.media.preferredPlayer = text;
+                }
+            }
+        }
+    }
 }
