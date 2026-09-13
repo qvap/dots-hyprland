@@ -36,14 +36,16 @@ Scope {
                     interval: (Config?.options.bar.autoHide.showWhenPressingSuper.delay ?? 100)
                     repeat: false
                     onTriggered: {
-                        barRoot.superShow = true
+                        barRoot.superShow = true;
                     }
                 }
                 Connections {
                     target: GlobalStates
                     function onSuperDownChanged() {
-                        if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable) return;
-                        if (GlobalStates.superDown) showBarTimer.restart();
+                        if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
+                            return;
+                        if (GlobalStates.superDown)
+                            showBarTimer.restart();
                         else {
                             showBarTimer.stop();
                             barRoot.superShow = false;
@@ -60,12 +62,13 @@ Scope {
                 }
 
                 onMustShowChanged: {
-                    if (!Config.options.bar.autoHide.enable) return;
+                    if (!Config.options.bar.autoHide.enable)
+                        return;
                     if (mustShow) {
-                        cornerRevealTimer.restart()
+                        cornerRevealTimer.restart();
                     } else {
-                        cornerRevealTimer.stop()
-                        barRoot.showCorners = false
+                        cornerRevealTimer.stop();
+                        barRoot.showCorners = false;
                     }
                 }
                 property bool superShow: false
@@ -74,15 +77,9 @@ Scope {
                 property bool monitorHasFullscreen: HyprlandData.workspaceById[thisMonitorData?.activeWorkspace?.id]?.hasfullscreen ?? false
                 property bool monitorHasSpecialOpen: (thisMonitorData?.specialWorkspace?.name ?? "") !== ""
                 exclusionMode: ExclusionMode.Ignore
-                property int normalExclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows))
-                    ? 0
-                    : Appearance.sizes.baseBarHeight
-                        + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
-                        + (Config.options.bar.cornerStyle === 2 ? -6 : 0)
+                property int normalExclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 : Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0) + (Config.options.bar.cornerStyle === 2 ? -6 : 0) + (Config.options.bar.cornerStyle === 3 ? (10 - Appearance.sizes.hyprlandGapsOut) : 0)
 
-                exclusiveZone: (barContent.centerOnly && Config.options.bar.centerOnlyReserveFrame)
-                    ? Config.options.bar.frameThickness
-                    : normalExclusiveZone
+                exclusiveZone: (barContent.centerOnly && Config.options.bar.centerOnlyReserveFrame) ? Config.options.bar.frameThickness : normalExclusiveZone
                 WlrLayershell.namespace: "quickshell:bar"
                 // Overlay layer only while special workspace sits on top of a fullscreen window on this monitor,
                 // else Top layer so fullscreen apps cover the bar as normal (Hyprland buries Top layer under fullscreen+special).
@@ -123,9 +120,8 @@ Scope {
                 }
 
                 margins {
-                    top: Config.options.bar.cornerStyle === 3 ? 5 : 0
-                    right: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.right) * -1
-                    bottom: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.bottom) * -1 || Config.options.bar.cornerStyle === 3 ? 5 : 0
+                    right: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.right) ? -1 : 0
+                    bottom: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.bottom) ? -1 : 0
                 }
 
                 // Include in focus grab
@@ -136,7 +132,7 @@ Scope {
                     GlobalFocusGrab.removePersistent(barRoot);
                 }
 
-                MouseArea  {
+                MouseArea {
                     id: hoverRegion
                     hoverEnabled: true
                     anchors {
@@ -148,22 +144,35 @@ Scope {
                     Item {
                         id: hoverMaskRegion
                         anchors {
-                            fill: barContent
-                            topMargin: -Config.options.bar.autoHide.hoverRegionWidth
-                            bottomMargin: -Config.options.bar.autoHide.hoverRegionWidth
+                            left: parent.left
+                            right: parent.right
+                            top: !Config.options.bar.bottom ? parent.top : undefined
+                            bottom: Config.options.bar.bottom ? parent.bottom : undefined
+                        }
+
+                        height: {
+                            if (!Config?.options?.bar?.autoHide?.enable) {
+                                return barContent.height + (Config.options.bar.cornerStyle === 3 ? 10 : 0);
+                            }
+
+                            const triggerWidth = Config?.options?.bar?.autoHide?.hoverRegionWidth ?? 5;
+
+                            const visibleContentHeight = !Config.options.bar.bottom ? (barContent.y + barContent.height) : (parent.height - barContent.y);
+
+                            return Math.max(triggerWidth, visibleContentHeight);
                         }
                     }
 
                     BarContent {
                         id: barContent
-                        
+
                         implicitHeight: Appearance.sizes.barHeight
                         anchors {
                             right: parent.right
                             left: parent.left
                             top: parent.top
                             bottom: undefined
-                            topMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                            topMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : (Config.options.bar.cornerStyle === 3 ? 5 : 0)
                             bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.bottom) * -1
                             rightMargin: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.right) * -1
                         }
@@ -189,11 +198,11 @@ Scope {
                             PropertyChanges {
                                 target: barContent
                                 anchors.topMargin: 0
-                                anchors.bottomMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                                anchors.bottomMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : (Config.options.bar.cornerStyle === 3 ? 5 : 0)
                             }
                         }
                     }
-                    
+
                     // Round decorators
                     Loader {
                         id: roundDecorators
@@ -223,11 +232,7 @@ Scope {
                         sourceComponent: Item {
                             implicitHeight: Appearance.rounding.screenRounding
 
-                            readonly property color decoratorColor: showBarBackground
-                                ? (Config.options.bar.followFrameColor && Config.options.bar.frameColor
-                                    ? Appearance.getColorFromName(Config.options.bar.frameColor)
-                                    : Appearance.colors.colLayer0)
-                                : "transparent"
+                            readonly property color decoratorColor: showBarBackground ? (Config.options.bar.followFrameColor && Config.options.bar.frameColor ? Appearance.getColorFromName(Config.options.bar.frameColor) : Appearance.colors.colLayer0) : "transparent"
 
                             RoundCorner {
                                 id: leftCorner
@@ -279,15 +284,15 @@ Scope {
         target: "bar"
 
         function toggle(): void {
-            GlobalStates.barOpen = !GlobalStates.barOpen
+            GlobalStates.barOpen = !GlobalStates.barOpen;
         }
 
         function close(): void {
-            GlobalStates.barOpen = false
+            GlobalStates.barOpen = false;
         }
 
         function open(): void {
-            GlobalStates.barOpen = true
+            GlobalStates.barOpen = true;
         }
     }
 
