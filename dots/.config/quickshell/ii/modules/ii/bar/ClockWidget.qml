@@ -36,7 +36,9 @@ BarWidgetSwitcher {
                         width: implicitWidth
                         horizontalAlignment: Text.AlignHCenter
                         font.letterSpacing: -0.2
-                        font.features: { "tnum": 1 }
+                        font.features: {
+                            "tnum": 1
+                        }
                         font.pixelSize: {
                             if (modelData.match(/am|pm/i))
                                 return Appearance.font.pixelSize.smaller;
@@ -77,10 +79,10 @@ BarWidgetSwitcher {
                         width: implicitWidth
                         horizontalAlignment: Text.AlignHCenter
                         font.letterSpacing: -0.2
-                        font.features: { "tnum": 1 }
-                        font.pixelSize: modelData.match(/am|pm/i)
-                            ? Appearance.font.pixelSize.smallest - 2
-                            : Appearance.font.pixelSize.small
+                        font.features: {
+                            "tnum": 1
+                        }
+                        font.pixelSize: modelData.match(/am|pm/i) ? Appearance.font.pixelSize.smallest - 2 : Appearance.font.pixelSize.small
                         color: Appearance.colors.colPrimary
                         text: modelData.padStart(2, "0")
                     }
@@ -125,15 +127,17 @@ BarWidgetSwitcher {
                 color: Appearance.colors.colOnLayer1
                 text: DateTime.time
                 font.letterSpacing: -0.4
-                font.features: { "tnum": 1 }
+                font.features: {
+                    "tnum": 1
+                }
             }
         }
     }
 
     rowMaterial: Component {
         RowLayout {
-            spacing: 4
             id: pill
+            spacing: 4
 
             property var timeParts: DateTime.time.split(/[: ]/)
             property string ampm: timeParts.find(part => /^(am|pm)$/i.test(part)) ?? ""
@@ -146,6 +150,7 @@ BarWidgetSwitcher {
                 text: DateTime.longDate
                 Layout.alignment: Qt.AlignVCenter
                 leftPadding: 5
+                Layout.topMargin: -1
             }
 
             Rectangle {
@@ -157,12 +162,14 @@ BarWidgetSwitcher {
                 StyledText {
                     id: timeText
                     anchors.centerIn: parent
+                    anchors.verticalCenterOffset: 1
                     font.pixelSize: Appearance.font.pixelSize.smallie
                     color: Appearance.colors.colOnPrimary
                     font.weight: Font.Bold
                     text: pill.time
-                    font.features: { "tnum": 1 }
-                    font.letterSpacing: -0.4
+                    font.features: {
+                        "tnum": 1
+                    }
                 }
             }
 
