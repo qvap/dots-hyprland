@@ -280,7 +280,7 @@ Item {
                     ColumnLayout {
                         spacing: -3
                         Layout.alignment: Qt.AlignVCenter
-                        Layout.topMargin: 2
+                        Layout.topMargin: -2
 
                         StyledText {
                             text: Config.options.profile.displayName === "" ? SystemInfo.username : Config.options.profile.displayName
