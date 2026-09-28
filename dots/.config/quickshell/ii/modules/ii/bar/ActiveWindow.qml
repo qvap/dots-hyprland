@@ -43,6 +43,15 @@ Item {
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : Math.min(colLayout.implicitWidth + 24, 280)
     implicitHeight: vertical ? iconItem.implicitHeight : Appearance.sizes.barHeight
 
+    Behavior on implicitWidth {
+        enabled: Config.options.mods.specialSauce && !root.vertical
+        NumberAnimation {
+            duration: 150
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+
     // Vertical
     Item {
         id: iconItem
@@ -72,19 +81,103 @@ Item {
         }
         spacing: -4
 
-        StyledText {
+        AnimatedWindowText {
             Layout.fillWidth: true
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
             elide: Text.ElideRight
             text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? root.activeWindow?.appId : (root.biggestWindow?.class) ?? Translation.tr("Desktop")
         }
-        StyledText {
+        AnimatedWindowText {
             Layout.fillWidth: true
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnLayer0
             elide: Text.ElideRight
             text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? root.activeWindow?.title : (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${WM.activeWorkspaceForMonitor(monitor?.name)?.id ?? 1}`
+        }
+    }
+
+    component AnimatedWindowText: Item {
+        id: animatedText
+        property string text: ""
+        property alias font: label.font
+        property alias color: label.color
+        property alias elide: label.elide
+        property bool ready: false
+        readonly property bool animateChanges: Config.options.mods.specialSauce && !root.vertical
+        implicitWidth: label.implicitWidth
+        implicitHeight: label.implicitHeight
+
+        function updateText() {
+            if (!ready)
+                return;
+            if (!animateChanges) {
+                exitAnimation.stop();
+                enterAnimation.stop();
+                label.text = text;
+                label.opacity = 1;
+                labelOffset.x = 0;
+            } else if (label.text !== text && !exitAnimation.running && !enterAnimation.running) {
+                exitAnimation.start();
+            }
+        }
+
+        onTextChanged: updateText()
+        onAnimateChangesChanged: updateText()
+        Component.onCompleted: {
+            label.text = text;
+            ready = true;
+        }
+
+        StyledText {
+            id: label
+            anchors.fill: parent
+            transform: Translate {
+                id: labelOffset
+            }
+        }
+
+        ParallelAnimation {
+            id: exitAnimation
+            NumberAnimation {
+                target: label
+                property: "opacity"
+                to: 0
+                duration: 90
+                easing.type: Easing.InSine
+            }
+            NumberAnimation {
+                target: labelOffset
+                property: "x"
+                to: -4
+                duration: 90
+                easing.type: Easing.InSine
+            }
+            onFinished: {
+                label.text = animatedText.text;
+                labelOffset.x = 4;
+                enterAnimation.start();
+            }
+        }
+
+        ParallelAnimation {
+            id: enterAnimation
+            NumberAnimation {
+                target: label
+                property: "opacity"
+                to: 1
+                duration: 150
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+            NumberAnimation {
+                target: labelOffset
+                property: "x"
+                to: 0
+                duration: 150
+                easing.type: Easing.OutSine
+            }
+            onFinished: animatedText.updateText()
         }
     }
 }

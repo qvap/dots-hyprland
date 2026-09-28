@@ -52,6 +52,23 @@ Item {
         return Qt.resolvedUrl(artFilePath);
     }
 
+    readonly property color artDominantColor: ColorUtils.mix(colorQuantizer.colors[0] ?? Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.8)
+    readonly property QtObject blendedColors: root.isMaterial && root.hasTrack && root.displayedArtFilePath !== "" && colorQuantizer.colors.length > 0 ? adaptedColors : Appearance.colors
+
+    readonly property color materialPillColor: root.hasTrack ? root.blendedColors.colLayer0 : Appearance.colors.colSecondaryContainer
+
+    ColorQuantizer {
+        id: colorQuantizer
+        source: root.isMaterial && root.hasTrack ? root.displayedArtFilePath : ""
+        depth: 0
+        rescaleSize: 1
+    }
+
+    AdaptedMaterialScheme {
+        id: adaptedColors
+        color: root.artDominantColor
+    }
+
     onArtFilePathChanged: {
         if (!root.artUrl || root.artUrl.length === 0) {
             root.artDownloaded = false;
@@ -162,7 +179,7 @@ Item {
     Rectangle {
         visible: root.vertical && root.isMaterial
         anchors.centerIn: parent
-        color: Appearance.colors.colSecondaryContainer
+        color: root.blendedColors.colSecondaryContainer
         radius: Appearance.rounding.full
         implicitWidth: 32
         implicitHeight: 32
@@ -172,7 +189,7 @@ Item {
             fill: 1
             text: root.activePlayer?.isPlaying ? "pause" : "music_note"
             iconSize: Appearance.font.pixelSize.normal
-            color: Appearance.colors.colOnSecondaryContainer
+            color: root.blendedColors.colOnSecondaryContainer
         }
     }
 
@@ -318,7 +335,7 @@ Item {
                         implicitWidth: 26
                         implicitHeight: 26
                         radius: Appearance.rounding.full
-                        color: Appearance.colors.colSecondaryContainer
+                        color: root.blendedColors.colSecondaryContainer
                         Layout.alignment: Qt.AlignVCenter
 
                         layer.enabled: true
@@ -346,7 +363,7 @@ Item {
                             fill: 1
                             text: "music_note"
                             iconSize: Appearance.font.pixelSize.normal
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: root.blendedColors.colOnSecondaryContainer
                             visible: root.displayedArtFilePath === ""
                         }
                     }
@@ -362,7 +379,7 @@ Item {
                             text: root.trackArtist
                             visible: !Config.options.bar.media.onlyTitle
                             font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: root.blendedColors.colSubtext
                             elide: Text.ElideRight
                             Layout.maximumWidth: 120
                             Behavior on text {
@@ -394,9 +411,8 @@ Item {
                             Layout.topMargin: (!root.activePlayer || root.trackArtist.length === 0) ? -13 : 0
                             text: StringUtils.cleanMusicTitle(root.trackTitle) || Translation.tr("No media")
                             font.pixelSize: Appearance.font.pixelSize.smallie
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: root.blendedColors.colOnLayer0
                             elide: Text.ElideRight
-                            opacity: Config.options.bar.media.onlyTitle ? 1 : 0.7
                             Layout.maximumWidth: 120
                             Behavior on text {
                                 SequentialAnimation {
@@ -429,9 +445,9 @@ Item {
                         implicitWidth: 40
                         implicitHeight: 23
                         buttonRadius: root.isPlaying ? Appearance.rounding.normal : 13
-                        colBackground: root.isPlaying ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerLow
-                        colBackgroundHover: root.isPlaying ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainerHover
-                        colRipple: root.isPlaying ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimaryContainerActive
+                        colBackground: root.isPlaying ? root.blendedColors.colPrimary : root.blendedColors.colSecondaryContainer
+                        colBackgroundHover: root.isPlaying ? root.blendedColors.colPrimaryHover : root.blendedColors.colSecondaryContainerHover
+                        colRipple: root.isPlaying ? root.blendedColors.colPrimaryActive : root.blendedColors.colSecondaryContainerActive
                         downAction: () => root.activePlayer?.togglePlaying()
                         contentItem: MaterialSymbol {
                             anchors.centerIn: parent
@@ -439,7 +455,7 @@ Item {
                             text: root.isPlaying ? "pause" : "play_arrow"
                             iconSize: Appearance.font.pixelSize.large
                             fill: 1
-                            color: root.isPlaying ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                            color: root.isPlaying ? root.blendedColors.colOnPrimary : root.blendedColors.colOnSecondaryContainer
                         }
                     }
 
@@ -450,8 +466,8 @@ Item {
                         Layout.leftMargin: -4
                         buttonRadius: 13
                         colBackground: "transparent"
-                        colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                        colRipple: Appearance.colors.colPrimaryContainerActive
+                        colBackgroundHover: root.blendedColors.colSecondaryContainerHover
+                        colRipple: root.blendedColors.colSecondaryContainerActive
                         downAction: () => root.activePlayer?.next()
                         altAction: () => root.activePlayer?.previous()
                         contentItem: MaterialSymbol {
@@ -460,7 +476,7 @@ Item {
                             text: "skip_next"
                             iconSize: Appearance.font.pixelSize.large
                             fill: 1
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: root.blendedColors.colOnSecondaryContainer
                         }
                     }
                 }

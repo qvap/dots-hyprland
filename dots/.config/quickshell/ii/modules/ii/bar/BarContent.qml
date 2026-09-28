@@ -65,10 +65,11 @@ Item {
         return true;
     }
 
-    function getMaterialPillColor(name) {
+    function getMaterialPillColor(name, widget = null) {
         if (Config.options.bar.cornerStyle !== 3) return Appearance.colors.colPrimaryContainer;
         switch(name) {
             case "media":
+                return widget?.materialPillColor ?? Appearance.colors.colSecondaryContainer;
             case "sysTray":
                 return Appearance.colors.colSecondaryContainer;
             case "resources":
@@ -222,7 +223,7 @@ Item {
                             currentIndex: index
                             totalCount: root.effectiveLeftLayout.length
                             paintMaterialPill: root.shouldPaintMaterialPill(modelData)
-                            bgColor: root.getMaterialPillColor(modelData)
+                            bgColor: root.getMaterialPillColor(modelData, leftMaterialWidgetLoader.item)
                             Loader {
                                 id: leftMaterialWidgetLoader
                                 Layout.fillHeight: true
@@ -332,7 +333,7 @@ Item {
                             currentIndex: index
                             totalCount: root.effectiveMiddleLayout.length
                             paintMaterialPill: root.shouldPaintMaterialPill(modelData)
-                            bgColor: root.getMaterialPillColor(modelData)
+                            bgColor: root.getMaterialPillColor(modelData, centerMaterialWidgetLoader.item)
                             Loader {
                                 id: centerMaterialWidgetLoader
                                 Layout.fillHeight: true
@@ -439,7 +440,7 @@ Item {
                             currentIndex: index
                             totalCount: root.effectiveRightLayout.length
                             paintMaterialPill: root.shouldPaintMaterialPill(modelData)
-                            bgColor: root.getMaterialPillColor(modelData)
+                            bgColor: root.getMaterialPillColor(modelData, rightMaterialWidgetLoader.item)
                             Loader {
                                 id: rightMaterialWidgetLoader
                                 Layout.fillHeight: true

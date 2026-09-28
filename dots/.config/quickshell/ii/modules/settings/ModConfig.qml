@@ -121,4 +121,19 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "skull"
+        title: Translation.tr("Forbidden Zone")
+
+        ConfigSwitch {
+            buttonIcon: "skillet"
+            text: Translation.tr("Special Sauce")
+            checked: Config.options.mods.specialSauce
+            onCheckedChanged: Config.options.mods.specialSauce = checked
+            StyledToolTip {
+                text: Translation.tr("Enable extra visual decorations")
+            }
+        }
+    }
 }

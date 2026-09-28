@@ -19,6 +19,7 @@ ButtonMouseArea {
     }
 
     property bool vertical: Config.options.bar.vertical
+    readonly property bool specialSauce: Config.options.mods.specialSauce
     property bool superPressAndHeld: false // Relevant modifications at bottom of file
 
     property real workspaceButtonWidth: Config.options.bar.cornerStyle === 3 ? 30 : 26
@@ -275,6 +276,7 @@ ButtonMouseArea {
     }
 
     FadeLoader {
+        id: specialWorkspaceLoader
         anchors.centerIn: parent
         shown: wsModel.specialWorkspaceActive
         scale: 0.8 + 0.2 * root.specialBlur
@@ -282,7 +284,32 @@ ButtonMouseArea {
         opacity: root.specialBlur
         Behavior on opacity {} // Don't animate, as specialBlur is already animated
 
-        sourceComponent: Pill {
+        sourceComponent: root.specialSauce ? specialWorkspaceLoader.sauceComponent : specialWorkspaceLoader.defaultComponent
+
+        property Component defaultComponent: Pill {
+            anchors.centerIn: parent
+            property real undirectionalWidth: root.activeWorkspaceSize
+            property real undirectionalLength: root.vertical
+                ? root.workspaceButtonWidth * Math.min(1.35, wsModel.shownCount)
+                : defaultSpecialWsText.implicitWidth + undirectionalWidth
+            color: Appearance.colors.colPrimary
+            implicitWidth: root.vertical ? undirectionalWidth : undirectionalLength
+            implicitHeight: root.vertical ? undirectionalLength : undirectionalWidth
+
+            StyledText {
+                id: defaultSpecialWsText
+                anchors.centerIn: parent
+                text: root.vertical ? "S" : wsModel.specialWorkspaceName
+                color: Appearance.colors.colOnPrimary
+                font.pixelSize: root.specialTextSize
+            }
+
+            Behavior on undirectionalLength {
+                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+            }
+        }
+
+        property Component sauceComponent: Pill {
             id: specialPill
             anchors.centerIn: parent
             property real undirectionalWidth: root.activeWorkspaceSize
