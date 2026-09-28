@@ -310,7 +310,8 @@ ButtonMouseArea {
                 Row {
                     id: specialTextRow
                     anchors.verticalCenter: parent.verticalCenter
-                    x: -specialTextViewport.scrollProgress * specialTextViewport.scrollDistance
+                    x: (specialTextViewport.width - specialWsText.implicitWidth) / 2
+                        - specialTextViewport.scrollProgress * specialTextViewport.scrollDistance
                     spacing: root.activeWorkspaceSize
 
                     StyledText {
