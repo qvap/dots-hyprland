@@ -25,6 +25,7 @@ Singleton {
             "text": action.text,
         })) ?? []
         property bool popup: false
+        property bool unread: false
         property bool isTransient: notification?.hints.transient ?? false
         property string appIcon: notification?.appIcon ?? ""
         property string appName: notification?.appName ?? ""
@@ -74,7 +75,7 @@ Singleton {
     }
 
     property bool silent: false
-    property int unread: 0
+    readonly property int unread: list.reduce((count, notif) => count + (notif.unread ? 1 : 0), 0)
     property var filePath: Directories.notificationsPath
     property list<Notif> list: []
     property var popupList: list.filter((notif) => notif.popup);
@@ -171,13 +172,13 @@ Singleton {
             // Popup
             if (!root.popupInhibited) {
                 newNotifObject.popup = true;
+                newNotifObject.unread = true;
                 if (notification.expireTimeout != 0) {
                     newNotifObject.timer = notifTimerComponent.createObject(root, {
                         "notificationId": newNotifObject.notificationId,
                         "interval": notification.expireTimeout < 0 ? (Config?.options.notifications.timeout ?? 7000) : notification.expireTimeout,
                     });
                 }
-                root.unread++;
             }
             root.notify(newNotifObject);
             // console.log(notifToString(newNotifObject));
@@ -186,7 +187,7 @@ Singleton {
     }
 
     function markAllRead() {
-        root.unread = 0;
+        root.list.forEach(notif => { notif.unread = false; });
     }
 
     function discardNotification(id) {
@@ -220,10 +221,18 @@ Singleton {
             root.list[index].timer.stop();
     }
 
+    function restartTimeout(id) {
+        const index = root.list.findIndex((notif) => notif.notificationId === id);
+        if (root.list[index] != null && root.list[index].timer != null)
+            root.list[index].timer.restart();
+    }
+
     function timeoutNotification(id) {
         const index = root.list.findIndex((notif) => notif.notificationId === id);
-        if (root.list[index] != null)
+        if (root.list[index] != null) {
             root.list[index].popup = false;
+            root.list[index].unread = false;
+        }
         root.timeout(id);
     }
 
@@ -233,6 +242,7 @@ Singleton {
         })
         root.popupList.forEach((notif) => {
             notif.popup = false;
+            notif.unread = false;
         });
     }
 

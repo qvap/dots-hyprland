@@ -19,9 +19,13 @@ MouseArea { // Notification group area
     property bool expanded: false
     property bool popup: false
     property real padding: 10
-    implicitHeight: background.implicitHeight
+    implicitHeight: background.implicitHeight + background.y
 
     property real dragConfirmThreshold: 70 // Drag further to discard notification
+    property real dragExpandThreshold: 70 // Pull down further to expand the group
+    property real dragExpandMaxOffset: 24
+    readonly property real yOffset: !expanded && dragManager.dragging && dragManager.dragDiffY > Math.abs(dragManager.dragDiffX)
+        ? dragExpandMaxOffset * (1 - Math.exp(-dragManager.dragDiffY / dragExpandThreshold)) : 0
     property real dismissOvershoot: 20 // Account for gaps and bouncy animations
     property var qmlParent: root?.parent?.parent // There's something between this and the parent ListView
     property var parentDragIndex: qmlParent?.dragIndex
@@ -41,12 +45,12 @@ MouseArea { // Notification group area
 
     hoverEnabled: true
     onContainsMouseChanged: {
-        if (!root.popup) return;
+        if (!root.popup || dragManager.pressed || dragManager.dragging) return;
         if (root.containsMouse) root.notifications.forEach(notif => {
             Notifications.cancelTimeout(notif.notificationId);
         });
         else root.notifications.forEach(notif => {
-            Notifications.timeoutNotification(notif.notificationId);
+            Notifications.restartTimeout(notif.notificationId);
         });
     }
 
@@ -81,9 +85,31 @@ MouseArea { // Notification group area
     DragManager { // Drag manager
         id: dragManager
         anchors.fill: parent
-        interactive: !expanded
+        interactive: !root.expanded
+        preventStealing: dragging && (horizontalDragDistance !== 0 || dragDiffY > 0)
         automaticallyReset: false
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        readonly property real horizontalDragDistance: Math.abs(dragDiffX) > Math.abs(dragDiffY) ? dragDiffX : 0
+
+        onPressedChanged: {
+            if (!root.popup) return;
+            if (pressed) {
+                root.notifications.forEach(notif => {
+                    Notifications.cancelTimeout(notif.notificationId);
+                });
+            } else {
+                // Check after expansion has updated the notification's hover area.
+                Qt.callLater(() => {
+                    if (dragManager.pressed) return;
+                    root.notifications.forEach(notif => {
+                        if (root.containsMouse)
+                            Notifications.cancelTimeout(notif.notificationId);
+                        else
+                            Notifications.restartTimeout(notif.notificationId);
+                    });
+                });
+            }
+        }
 
         onPressed: (mouse) => {
             if (mouse.button === Qt.RightButton) 
@@ -101,15 +127,21 @@ MouseArea { // Notification group area
             }
         }
 
-        onDragDiffXChanged: () => {
-            root.qmlParent.dragDistance = dragDiffX;
+        onHorizontalDragDistanceChanged: () => {
+            root.qmlParent.dragDistance = horizontalDragDistance;
         }
 
         onDragReleased: (diffX, diffY) => {
-            if (Math.abs(diffX) > root.dragConfirmThreshold)
-                root.destroyWithAnimation(diffX < 0);
-            else 
+            if (diffY > root.dragExpandThreshold && diffY > Math.abs(diffX)) {
                 dragManager.resetDrag();
+                root.qmlParent.resetDrag();
+                root.toggleExpanded();
+            } else if (Math.abs(diffX) > root.dragConfirmThreshold && Math.abs(diffX) > Math.abs(diffY)) {
+                root.destroyWithAnimation(diffX < 0);
+            } else {
+                dragManager.resetDrag();
+                root.qmlParent.resetDrag();
+            }
         }
     }
 
@@ -120,10 +152,20 @@ MouseArea { // Notification group area
     Rectangle { // Background of the notification
         id: background
         anchors.left: parent.left
+        y: root.yOffset
         width: parent.width
         color: popup ? Appearance.colors.colBackgroundSurfaceContainer : Appearance.colors.colLayer2
         radius: Appearance.rounding.normal
         anchors.leftMargin: root.xOffset
+
+        Behavior on y {
+            enabled: !dragManager.dragging
+            NumberAnimation {
+                duration: Appearance.animation.elementMove.duration
+                easing.type: Appearance.animation.elementMove.type
+                easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+            }
+        }
 
         Behavior on anchors.leftMargin {
             enabled: !dragManager.dragging
