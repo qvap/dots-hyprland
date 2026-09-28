@@ -283,25 +283,94 @@ ButtonMouseArea {
         Behavior on opacity {} // Don't animate, as specialBlur is already animated
 
         sourceComponent: Pill {
+            id: specialPill
             anchors.centerIn: parent
             property real undirectionalWidth: root.activeWorkspaceSize
             property real undirectionalLength: {
                 const base = root.workspaceButtonWidth * Math.min(1.35, wsModel.shownCount); // Who tf only configures only 2 workspaces shown anyway?
                 if (root.vertical)
                     return base;
-                return specialWsText.implicitWidth + undirectionalWidth;
+                return Math.min(specialWsText.implicitWidth + undirectionalWidth + 16, root.width);
             }
-            color: Appearance.colors.colPrimary
+            color: Appearance.m3colors.darkmode ? Appearance.m3colors.m3surfaceContainerLowest : Appearance.m3colors.m3inverseSurface
 
             implicitWidth: root.vertical ? undirectionalWidth : undirectionalLength
             implicitHeight: root.vertical ? undirectionalLength : undirectionalWidth
 
-            StyledText {
-                id: specialWsText
+            Item {
+                id: specialTextViewport
                 anchors.centerIn: parent
-                text: (!root.vertical ? wsModel.specialWorkspaceName : "S")
-                color: Appearance.colors.colOnPrimary
-                font.pixelSize: root.specialTextSize
+                width: Math.max(0, specialPill.width - (root.vertical ? 8 : root.activeWorkspaceSize))
+                height: specialPill.height
+                clip: true
+                property real scrollProgress: 0
+                readonly property real scrollDistance: specialWsText.implicitWidth + specialTextRow.spacing
+                readonly property real fadeWidth: Math.min(root.specialTextSize, width / 3)
+
+                Row {
+                    id: specialTextRow
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: -specialTextViewport.scrollProgress * specialTextViewport.scrollDistance
+                    spacing: root.activeWorkspaceSize
+
+                    StyledText {
+                        id: specialWsText
+                        text: wsModel.specialWorkspaceName
+                        color: Appearance.colors.colPrimary
+                        font.pixelSize: root.specialTextSize
+                    }
+
+                    StyledText {
+                        text: specialWsText.text
+                        color: specialWsText.color
+                        font: specialWsText.font
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: specialTextViewport.fadeWidth
+                    height: Math.min(specialWsText.implicitHeight, parent.height)
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop {
+                            position: 0
+                            color: specialPill.color
+                        }
+                        GradientStop {
+                            position: 1
+                            color: ColorUtils.transparentize(specialPill.color)
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: specialTextViewport.fadeWidth
+                    height: Math.min(specialWsText.implicitHeight, parent.height)
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop {
+                            position: 0
+                            color: ColorUtils.transparentize(specialPill.color)
+                        }
+                        GradientStop {
+                            position: 1
+                            color: specialPill.color
+                        }
+                    }
+                }
+
+                NumberAnimation on scrollProgress {
+                    from: 0
+                    to: 1
+                    duration: Math.max(1, specialTextViewport.scrollDistance / 24 * 1000)
+                    loops: Animation.Infinite
+                    running: wsModel.specialWorkspaceActive && root.specialBlur > 0 && specialTextViewport.width > 0
+                    easing.type: Easing.Linear
+                }
             }
 
             Behavior on undirectionalLength {
@@ -395,17 +464,28 @@ ButtonMouseArea {
                         color: wsNum.contentColor
                         text: {
                             switch (wsNum.wsId) {
-                                case 1:  return "code"
-                                case 2:  return "public"
-                                case 3:  return "music_note"
-                                case 4:  return "edit_square"
-                                case 5:  return "image"
-                                case 6:  return "forum"
-                                case 7:  return "browser_updated"
-                                case 8:  return "finance_mode"
-                                case 9:  return "monitor"
-                                case 10: return "analytics"
-                                default: return "circle"
+                            case 1:
+                                return "code";
+                            case 2:
+                                return "public";
+                            case 3:
+                                return "music_note";
+                            case 4:
+                                return "edit_square";
+                            case 5:
+                                return "image";
+                            case 6:
+                                return "forum";
+                            case 7:
+                                return "browser_updated";
+                            case 8:
+                                return "finance_mode";
+                            case 9:
+                                return "monitor";
+                            case 10:
+                                return "analytics";
+                            default:
+                                return "circle";
                             }
                         }
                     }
