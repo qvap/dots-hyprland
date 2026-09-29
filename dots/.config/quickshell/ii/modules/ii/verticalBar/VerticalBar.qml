@@ -48,7 +48,23 @@ Scope {
                     }
                 }
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow
+                readonly property bool islandInteracting: islandItem?.interacting ?? false
+                readonly property bool hasIsland: [Config.options.bar.layouts.leftLayout,
+                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
+                    .some(layout => layout.includes("island"))
+                property var islandItem: null
+                property alias islandOverlay: islandOverlayLayer
+                readonly property bool islandExpanded: islandItem?.expanded ?? false
+                WlrLayershell.keyboardFocus: islandExpanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+                onIslandExpandedChanged: {
+                    if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
+                    else GlobalFocusGrab.removeDismissable(barRoot);
+                }
+                function close() { if (islandItem) islandItem.expanded = false; }
+                // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
+                Item { id: islandOverlayLayer; anchors.fill: parent; z: 100 }
+
+                property bool mustShow: hoverRegion.containsMouse || superShow || islandInteracting
                 exclusionMode: ExclusionMode.Ignore
                 property int normalExclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows))
                     ? 0
@@ -60,8 +76,20 @@ Scope {
                     ? Config.options.bar.frameThickness
                     : normalExclusiveZone
                 WlrLayershell.namespace: "quickshell:verticalBar"
-                implicitWidth: Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
-                mask: Region { item: hoverMaskRegion }
+                implicitWidth: hasIsland ? Math.min(screen.width, Appearance.sizes.verticalBarWidth + Appearance.sizes.mediaControlsWidth + 32)
+                    : Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
+                mask: Region {
+                    item: hoverMaskRegion
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.islandItem?.pullSurface ?? null
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.islandItem?.expandedSurface ?? null
+                        radius: barRoot.islandItem?.expandedSurface?.radius ?? 0
+                    }
+                }
                 color: "transparent"
 
                 anchors {
@@ -72,7 +100,10 @@ Scope {
                 }
 
                 Component.onCompleted: { GlobalFocusGrab.addPersistent(barRoot); }
-                Component.onDestruction: { GlobalFocusGrab.removePersistent(barRoot); }
+                Component.onDestruction: {
+                    GlobalFocusGrab.removePersistent(barRoot);
+                    GlobalFocusGrab.removeDismissable(barRoot);
+                }
 
                 MouseArea {
                     id: hoverRegion
@@ -184,7 +215,7 @@ Scope {
                                 target: barContent
                                 anchors.topMargin: 0
                                 anchors.rightMargin: (Config?.options.bar.autoHide.enable && !mustShow)
-                                    ? -Appearance.sizes.barHeight
+                                    ? -Appearance.sizes.verticalBarWidth
                                     : (Config.options.bar.cornerStyle === 3 ? (Appearance.sizes.hyprlandGapsOut || 5) : 0)
                             }
                         }

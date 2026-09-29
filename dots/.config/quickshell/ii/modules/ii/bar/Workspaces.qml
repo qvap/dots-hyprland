@@ -18,6 +18,9 @@ ButtonMouseArea {
         screen: root.QsWindow.window?.screen
     }
 
+    property alias workspaceModel: wsModel
+    property bool showSpecialIndicator: !(root.QsWindow.window?.hasIsland ?? false)
+
     property bool vertical: Config.options.bar.vertical
     readonly property bool specialSauce: Config.options.mods.specialSauce
     property bool superPressAndHeld: false // Relevant modifications at bottom of file
@@ -39,12 +42,13 @@ ButtonMouseArea {
     implicitWidth: vertical ? barThickness : occupiedIndicators.implicitWidth
     implicitHeight: vertical ? occupiedIndicators.implicitHeight : barThickness
 
-    property real specialBlur: (wsModel.specialWorkspaceActive && !containsMouse) ? 1 : 0
+    property real specialBlur: (root.showSpecialIndicator && wsModel.specialWorkspaceActive && !containsMouse) ? 1 : 0
     Behavior on specialBlur {
         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
     }
 
     // Interactions
+    property bool switchOnPress: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     hoverEnabled: true
     property int hoverIndex: {
@@ -56,10 +60,13 @@ ButtonMouseArea {
         WM.switchWorkspace(wsModel.getWorkspaceIdAt(hoverIndex));
     }
     onPressed: mouse => {
-        if (mouse.button == Qt.LeftButton)
+        if (mouse.button == Qt.LeftButton && switchOnPress)
             switchWorkspaceToHovered();
         else if (mouse.button == Qt.RightButton)
             GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+    }
+    onClicked: mouse => {
+        if (mouse.button === Qt.LeftButton && !switchOnPress) switchWorkspaceToHovered();
     }
     onWheel: event => {
         if (event.angleDelta.y < 0)
@@ -278,129 +285,36 @@ ButtonMouseArea {
     FadeLoader {
         id: specialWorkspaceLoader
         anchors.centerIn: parent
-        shown: wsModel.specialWorkspaceActive
+        shown: root.showSpecialIndicator && wsModel.specialWorkspaceActive
         scale: 0.8 + 0.2 * root.specialBlur
 
         opacity: root.specialBlur
         Behavior on opacity {} // Don't animate, as specialBlur is already animated
 
-        sourceComponent: root.specialSauce ? specialWorkspaceLoader.sauceComponent : specialWorkspaceLoader.defaultComponent
-
-        property Component defaultComponent: Pill {
-            anchors.centerIn: parent
-            property real undirectionalWidth: root.activeWorkspaceSize
-            property real undirectionalLength: root.vertical
-                ? root.workspaceButtonWidth * Math.min(1.35, wsModel.shownCount)
-                : defaultSpecialWsText.implicitWidth + undirectionalWidth
-            color: Appearance.colors.colPrimary
-            implicitWidth: root.vertical ? undirectionalWidth : undirectionalLength
-            implicitHeight: root.vertical ? undirectionalLength : undirectionalWidth
-
-            StyledText {
-                id: defaultSpecialWsText
-                anchors.centerIn: parent
-                text: root.vertical ? "S" : wsModel.specialWorkspaceName
-                color: Appearance.colors.colOnPrimary
-                font.pixelSize: root.specialTextSize
-            }
-
-            Behavior on undirectionalLength {
-                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
-            }
-        }
-
-        property Component sauceComponent: Pill {
+        sourceComponent: Pill {
             id: specialPill
             anchors.centerIn: parent
-            property real undirectionalWidth: root.activeWorkspaceSize
-            property real undirectionalLength: {
-                const base = root.workspaceButtonWidth * Math.min(1.35, wsModel.shownCount); // Who tf only configures only 2 workspaces shown anyway?
-                if (root.vertical)
-                    return base;
-                return Math.min(specialWsText.implicitWidth + undirectionalWidth + 16, root.width);
-            }
-            color: Appearance.m3colors.darkmode ? Appearance.m3colors.m3surfaceContainerLowest : Appearance.m3colors.m3inverseSurface
+            property real undirectionalLength: root.vertical
+                ? root.workspaceButtonWidth * Math.min(1.35, wsModel.shownCount)
+                : Math.min(specialText.implicitWidth + root.activeWorkspaceSize + (root.specialSauce ? 16 : 0), root.width)
+            implicitWidth: root.vertical ? root.activeWorkspaceSize : undirectionalLength
+            implicitHeight: root.vertical ? undirectionalLength : root.activeWorkspaceSize
+            color: root.specialSauce
+                ? (Appearance.m3colors.darkmode ? Appearance.m3colors.m3surfaceContainerLowest : Appearance.m3colors.m3inverseSurface)
+                : Appearance.colors.colPrimary
 
-            implicitWidth: root.vertical ? undirectionalWidth : undirectionalLength
-            implicitHeight: root.vertical ? undirectionalLength : undirectionalWidth
-
-            Item {
-                id: specialTextViewport
+            ScrollingText {
+                id: specialText
                 anchors.centerIn: parent
-                width: Math.max(0, specialPill.width - (root.vertical ? 8 : root.activeWorkspaceSize))
-                height: specialPill.height
-                clip: true
-                property real scrollProgress: 0
-                readonly property real scrollDistance: specialWsText.implicitWidth + specialTextRow.spacing
-                readonly property real fadeWidth: Math.min(root.specialTextSize, width / 3)
-
-                Row {
-                    id: specialTextRow
-                    anchors.verticalCenter: parent.verticalCenter
-                    x: (specialTextViewport.width - specialWsText.implicitWidth) / 2
-                        - specialTextViewport.scrollProgress * specialTextViewport.scrollDistance
-                    spacing: root.activeWorkspaceSize
-
-                    StyledText {
-                        id: specialWsText
-                        text: wsModel.specialWorkspaceName
-                        color: Appearance.colors.colPrimary
-                        font.pixelSize: root.specialTextSize
-                    }
-
-                    StyledText {
-                        text: specialWsText.text
-                        color: specialWsText.color
-                        font: specialWsText.font
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: specialTextViewport.fadeWidth
-                    height: Math.min(specialWsText.implicitHeight, parent.height)
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop {
-                            position: 0
-                            color: specialPill.color
-                        }
-                        GradientStop {
-                            position: 1
-                            color: ColorUtils.transparentize(specialPill.color)
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: specialTextViewport.fadeWidth
-                    height: Math.min(specialWsText.implicitHeight, parent.height)
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop {
-                            position: 0
-                            color: ColorUtils.transparentize(specialPill.color)
-                        }
-                        GradientStop {
-                            position: 1
-                            color: specialPill.color
-                        }
-                    }
-                }
-
-                NumberAnimation on scrollProgress {
-                    from: 0
-                    to: 1
-                    duration: Math.max(1, specialTextViewport.scrollDistance / 24 * 1000)
-                    loops: Animation.Infinite
-                    running: wsModel.specialWorkspaceActive && root.specialBlur > 0 && specialTextViewport.width > 0
-                    easing.type: Easing.Linear
-                }
+                width: Math.max(0, parent.width - (root.vertical && root.specialSauce ? 8 : root.activeWorkspaceSize))
+                height: parent.height
+                text: root.vertical && !root.specialSauce ? "S" : wsModel.specialWorkspaceName
+                color: root.specialSauce ? Appearance.colors.colPrimary : Appearance.colors.colOnPrimary
+                backgroundColor: parent.color
+                font.family: Appearance.font.family.main
+                font.pixelSize: root.specialTextSize
+                scrolling: (root.specialSauce || !root.vertical) && root.specialBlur > 0
             }
-
             Behavior on undirectionalLength {
                 animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
             }

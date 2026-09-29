@@ -72,7 +72,23 @@ Scope {
                     }
                 }
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow
+                readonly property bool islandInteracting: islandItem?.interacting ?? false
+                readonly property bool hasIsland: [Config.options.bar.layouts.leftLayout,
+                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
+                    .some(layout => layout.includes("island"))
+                property var islandItem: null
+                property alias islandOverlay: islandOverlayLayer
+                readonly property bool islandExpanded: islandItem?.expanded ?? false
+                WlrLayershell.keyboardFocus: islandExpanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+                onIslandExpandedChanged: {
+                    if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
+                    else GlobalFocusGrab.removeDismissable(barRoot);
+                }
+                function close() { if (islandItem) islandItem.expanded = false; }
+                // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
+                Item { id: islandOverlayLayer; anchors.fill: parent; z: 100 }
+
+                property bool mustShow: hoverRegion.containsMouse || superShow || islandInteracting
                 property var thisMonitorData: HyprlandData.monitors.find(m => m.name === barRoot.screen?.name)
                 property bool monitorHasFullscreen: HyprlandData.workspaceById[thisMonitorData?.activeWorkspace?.id]?.hasfullscreen ?? false
                 property bool monitorHasSpecialOpen: (thisMonitorData?.specialWorkspace?.name ?? "") !== ""
@@ -84,7 +100,8 @@ Scope {
                 // Overlay layer only while special workspace sits on top of a fullscreen window on this monitor,
                 // else Top layer so fullscreen apps cover the bar as normal (Hyprland buries Top layer under fullscreen+special).
                 WlrLayershell.layer: (monitorHasFullscreen && monitorHasSpecialOpen) ? WlrLayer.Overlay : WlrLayer.Top
-                implicitHeight: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+                implicitHeight: hasIsland ? Math.min(screen.height, Appearance.sizes.barHeight + Appearance.sizes.mediaControlsHeight + 32)
+                    : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
                 // When Overlay-layer, bar shares a layer with the screen-corner click zones (ScreenCorners.qml)
                 // and same-layer overlap is resolved by stacking, not layer priority - bar was winning and
                 // swallowing the tiny corner-open hit rects. Carve them out of the bar's own mask so clicks
@@ -94,6 +111,15 @@ Scope {
                 property int cornerOpenCutHeight: cutOutCornerOpenZones ? Config.options.sidebar.cornerOpen.cornerRegionHeight : 0
                 mask: Region {
                     item: hoverMaskRegion
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.islandItem?.pullSurface ?? null
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.islandItem?.expandedSurface ?? null
+                        radius: barRoot.islandItem?.expandedSurface?.radius ?? 0
+                    }
                     Region {
                         intersection: Intersection.Subtract
                         x: 0
@@ -130,6 +156,7 @@ Scope {
                 }
                 Component.onDestruction: {
                     GlobalFocusGrab.removePersistent(barRoot);
+                    GlobalFocusGrab.removeDismissable(barRoot);
                 }
 
                 MouseArea {

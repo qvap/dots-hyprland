@@ -29,8 +29,9 @@ Item {
     readonly property var effectiveMiddleLayout: filterLayout(Config.options.bar.layouts.middleLayout)
     readonly property var effectiveRightLayout:  filterLayout(Config.options.bar.layouts.rightLayout)
     readonly property bool centerOnWorkspaces: Config.options.bar.centerOnWorkspaces
-        && effectiveMiddleLayout.includes("workspaces")
-    readonly property int workspaceCenterIndex: effectiveMiddleLayout.indexOf("workspaces")
+        && (effectiveMiddleLayout.includes("workspaces") || effectiveMiddleLayout.includes("island"))
+    readonly property int workspaceCenterIndex: effectiveMiddleLayout.includes("workspaces")
+        ? effectiveMiddleLayout.indexOf("workspaces") : effectiveMiddleLayout.indexOf("island")
     property int middleLayoutRevision: 0
     readonly property real middleContentCenterOffset: {
         middleLayoutRevision
@@ -58,7 +59,7 @@ Item {
 
     function shouldPaintMaterialPill(name) {
         if (Config.options.bar.cornerStyle !== 3) return false;
-        const blacklist = ["workspaces", "divisor", "powerButton", "docktoPanel", "leftSidebarButton", "activeWindow"];
+        const blacklist = ["workspaces", "island", "divisor", "powerButton", "docktoPanel", "leftSidebarButton", "activeWindow"];
         if (blacklist.includes(name)) {
             return false;
         }

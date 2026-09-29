@@ -48,6 +48,11 @@ ContentPage {
             icon: "steppers"
         },
         {
+            id: "island",
+            name: Translation.tr("Island"),
+            icon: "pill"
+        },
+        {
             id: "weatherBar",
             name: Translation.tr("Weather"),
             icon: "flare"
