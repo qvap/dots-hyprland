@@ -48,19 +48,26 @@ Scope {
                     }
                 }
                 property bool superShow: false
-                readonly property bool islandInteracting: islandItem?.interacting ?? false
+                readonly property bool islandInteracting: (islandItem?.interacting ?? false) || (mediaItem?.interacting ?? false)
                 readonly property bool hasIsland: [Config.options.bar.layouts.leftLayout,
                     Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
                     .some(layout => layout.includes("island"))
+                readonly property bool hasMorphingMedia: [Config.options.bar.layouts.leftLayout,
+                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
+                    .some(layout => layout.includes("media"))
                 property var islandItem: null
+                property var mediaItem: null
                 property alias islandOverlay: islandOverlayLayer
-                readonly property bool islandExpanded: islandItem?.expanded ?? false
+                readonly property bool islandExpanded: (islandItem?.expanded ?? false) || (mediaItem?.expanded ?? false)
                 WlrLayershell.keyboardFocus: islandExpanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                 onIslandExpandedChanged: {
                     if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
                     else GlobalFocusGrab.removeDismissable(barRoot);
                 }
-                function close() { if (islandItem) islandItem.expanded = false; }
+                function close() {
+                    if (islandItem) islandItem.expanded = false;
+                    if (mediaItem) mediaItem.expanded = false;
+                }
                 // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
                 Item { id: islandOverlayLayer; anchors.fill: parent; z: 100 }
 
@@ -76,7 +83,7 @@ Scope {
                     ? Config.options.bar.frameThickness
                     : normalExclusiveZone
                 WlrLayershell.namespace: "quickshell:verticalBar"
-                implicitWidth: hasIsland ? Math.min(screen.width, Appearance.sizes.verticalBarWidth + Appearance.sizes.mediaControlsWidth + 32)
+                implicitWidth: hasIsland || hasMorphingMedia ? Math.min(screen.width, Appearance.sizes.verticalBarWidth + Appearance.sizes.mediaControlsWidth + 32)
                     : Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
                 mask: Region {
                     item: hoverMaskRegion
@@ -88,6 +95,15 @@ Scope {
                         intersection: Intersection.Combine
                         item: barRoot.islandItem?.expandedSurface ?? null
                         radius: barRoot.islandItem?.expandedSurface?.radius ?? 0
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.mediaItem?.pullSurface ?? null
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.mediaItem?.expandedSurface ?? null
+                        radius: barRoot.mediaItem?.expandedSurface?.radius ?? 0
                     }
                 }
                 color: "transparent"
