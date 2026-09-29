@@ -11,6 +11,8 @@ Item {
     property bool paintMaterialPill: false
     property real padding: (root.isMaterial && !root.paintMaterialPill) ? 0 : 5
     property color bgColor: Appearance.colors.colPrimaryContainer
+    property Item morphingMedia: null
+    property alias visualBackground: background
 
     readonly property color resolvedGroupColor: {
         const name = Config.options.bar.groupColor
@@ -40,6 +42,7 @@ Item {
 
     Rectangle {
         id: background
+        opacity: root.morphingMedia?.expansion > 0 ? 0 : 1
         anchors {
             fill: parent
             topMargin: root.vertical ? 0 : 4

@@ -247,16 +247,17 @@ Item { // Player instance
                 Layout.fillHeight: true
                 spacing: 2
 
-                StyledText {
+                ScrollingText {
                     id: trackTitle
                     Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
                     font.pixelSize: Appearance.font.pixelSize.large
+                    font.family: Appearance.font.family.main
                     color: blendedColors.colOnLayer0
-                    elide: Text.ElideRight
+                    backgroundColor: ColorUtils.applyAlpha(blendedColors.colLayer0, 1)
+                    centered: false
+                    scrollOnlyOnOverflow: true
                     text: StringUtils.cleanMusicTitle(root.player?.trackTitle) || "Untitled"
-                    animateChange: root.animateTrackChanges
-                    animationDistanceX: 6
-                    animationDistanceY: 0
                 }
 
                 StyledText {

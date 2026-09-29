@@ -201,6 +201,8 @@ Item {
             Rectangle {
                 id: leftMaterialPill
                 visible: root.isMaterial
+                opacity: root.effectiveLeftLayout.length === 1 && root.effectiveLeftLayout[0] === "media"
+                    && leftMaterialGroupRepeater.itemAt(0)?.morphingMedia?.expansion > 0 ? 0 : 1
                 anchors.centerIn: parent
                 implicitWidth: leftMaterialRow.implicitWidth + 10
                 implicitHeight: leftMaterialRow.implicitHeight
@@ -213,6 +215,7 @@ Item {
                     spacing: 3
 
                     Repeater {
+                        id: leftMaterialGroupRepeater
                         model: root.effectiveLeftLayout
                         delegate: leftMaterialGroupDelegate
                     }
@@ -308,6 +311,8 @@ Item {
             Rectangle {
                 id: centerMaterialPill
                 visible: root.isMaterial
+                opacity: root.effectiveMiddleLayout.length === 1 && root.effectiveMiddleLayout[0] === "media"
+                    && centerMaterialWorkspaceGroupRepeater.itemAt(0)?.morphingMedia?.expansion > 0 ? 0 : 1
                 anchors.centerIn: parent
                 implicitWidth: centerMaterialRow.implicitWidth + 10
                 implicitHeight: centerMaterialRow.implicitHeight 
@@ -418,6 +423,8 @@ Item {
             Rectangle {
                 id: rightMaterialPill
                 visible: root.isMaterial
+                opacity: root.effectiveRightLayout.length === 1 && root.effectiveRightLayout[0] === "media"
+                    && rightMaterialGroupRepeater.itemAt(0)?.morphingMedia?.expansion > 0 ? 0 : 1
                 anchors.centerIn: parent
                 implicitWidth: rightMaterialRow.implicitWidth + 10
                 implicitHeight: rightMaterialRow.implicitHeight 
@@ -430,6 +437,7 @@ Item {
                     spacing: 3
 
                     Repeater {
+                        id: rightMaterialGroupRepeater
                         model: root.effectiveRightLayout
                         delegate: rightMaterialGroupDelegate
                     }

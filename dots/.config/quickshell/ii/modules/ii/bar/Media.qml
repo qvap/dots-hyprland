@@ -12,6 +12,8 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
+import Quickshell.Widgets
+import qs.modules.ii.mediaControls
 
 Item {
     id: root
@@ -38,6 +40,157 @@ Item {
     property string trackArtist: activePlayer?.trackArtist ?? ""
     property bool isPlaying: activePlayer?.isPlaying ?? false
     property bool hasTrack: trackTitle.length > 0
+    readonly property bool hasActivity: activePlayer !== null && activePlayer.playbackState !== MprisPlaybackState.Stopped
+    property bool expanded: false
+    property bool collapsing: false
+    property bool dragging: false
+    property real pullDistance: 0
+    readonly property real pullThreshold: 70
+    readonly property var barWindow: root.QsWindow.window
+    property var barGroup: null
+    function registerWithGroup() {
+        let item = root.parent;
+        while (item) {
+            if (typeof item.morphingMedia !== "undefined") {
+                barGroup = item;
+                item.morphingMedia = root;
+                return;
+            }
+            item = item.parent;
+        }
+    }
+    readonly property Item groupBackground: barGroup?.visualBackground ?? null
+    readonly property bool exposed: visible && (barWindow?.visible ?? false)
+    readonly property bool interacting: exposed && (expanded || dragging || expansion > 0)
+    readonly property real playerWidth: Math.min(Appearance.sizes.mediaControlsWidth - 2 * Appearance.sizes.elevationMargin,
+        (barWindow?.screen?.width ?? 440) - 16)
+    readonly property real playerHeight: Math.min(Appearance.sizes.mediaControlsHeight - 2 * Appearance.sizes.elevationMargin,
+        (barWindow?.screen?.height ?? 160) - 16)
+    property rect compactBounds: Qt.rect(0, 0, 240, 32)
+    property rect expandedBounds: Qt.rect(0, 0, 440, 160)
+    property real expansion: 0
+    onExpansionChanged: if (collapsing && expansion === 0) collapsing = false
+    Behavior on expansion {
+        enabled: !root.dragging
+        NumberAnimation { duration: 420; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.standard }
+    }
+    function interpolate(from, to) { return from + (to - from) * expansion; }
+    function captureBounds() {
+        if (!barWindow) return;
+        const source = groupBackground ?? root;
+        const pos = source.mapToItem(barWindow.contentItem, 0, 0);
+        compactBounds = Qt.rect(pos.x, pos.y, source.width, source.height);
+        const cx = pos.x + source.width / 2;
+        const cy = pos.y + source.height / 2;
+        const targetX = root.vertical
+            ? (Config.options.bar.bottom ? cx - Appearance.sizes.verticalBarWidth / 2 - 8 - playerWidth
+                : cx + Appearance.sizes.verticalBarWidth / 2 + 8) : cx - playerWidth / 2;
+        const targetY = root.vertical ? cy - playerHeight / 2
+            : (Config.options.bar.bottom ? cy - Appearance.sizes.barHeight / 2 - 8 - playerHeight
+                : cy + Appearance.sizes.barHeight / 2 + 8);
+        expandedBounds = Qt.rect(Math.max(8, Math.min(barWindow.width - playerWidth - 8, targetX)),
+            Math.max(8, Math.min(barWindow.height - playerHeight - 8, targetY)), playerWidth, playerHeight);
+    }
+    function beginPull() {
+        if (!activePlayer) return;
+        captureBounds();
+        dragging = true;
+        pullDistance = 0;
+        expansion = 0;
+    }
+    function updatePull(distance) {
+        if (!dragging) return;
+        pullDistance = Math.max(0, distance);
+        if (pullDistance >= pullThreshold) {
+            dragging = false;
+            expanded = true;
+        } else expansion = pullDistance / pullThreshold * 0.12;
+    }
+    function cancelPull() { dragging = false; pullDistance = 0; expansion = 0; }
+    onExpandedChanged: {
+        if (expanded) {
+            collapsing = false;
+            if (barWindow?.islandItem) barWindow.islandItem.expanded = false;
+            GlobalStates.mediaControlsOpen = false;
+            if (expansion === 0) captureBounds();
+            if (playerLoader.status === Loader.Ready) expansion = 1;
+        } else {
+            collapsing = expansion > 0;
+            expansion = 0;
+        }
+    }
+    onHasActivityChanged: if (!hasActivity) { expanded = false; cancelPull(); }
+    function registerWithBar() {
+        if (!barWindow || typeof barWindow.mediaItem === "undefined") return;
+        if (exposed) barWindow.mediaItem = root;
+        else if (barWindow.mediaItem === root) barWindow.mediaItem = null;
+    }
+    Component.onCompleted: { registerWithBar(); registerWithGroup(); }
+    Component.onDestruction: {
+        if (barWindow?.mediaItem === root) barWindow.mediaItem = null;
+        if (barGroup?.morphingMedia === root) barGroup.morphingMedia = null;
+    }
+    onBarWindowChanged: registerWithBar()
+    onParentChanged: registerWithGroup()
+    onExposedChanged: {
+        if (!exposed) { expanded = false; if (dragging) cancelPull(); }
+        registerWithBar();
+    }
+    readonly property Item pullSurface: dragging || (expanded && pullDistance >= pullThreshold && expansion < 1)
+        ? pullCorridor : null
+    Item {
+        id: pullCorridor
+        parent: root.barWindow?.islandOverlay ?? root
+        x: root.compactBounds.x - (root.vertical && Config.options.bar.bottom ? root.pullThreshold : 0)
+        y: root.compactBounds.y - (!root.vertical && Config.options.bar.bottom ? root.pullThreshold : 0)
+        width: root.compactBounds.width + (root.vertical ? root.pullThreshold : 0)
+        height: root.compactBounds.height + (!root.vertical ? root.pullThreshold : 0)
+    }
+    readonly property Item expandedSurface: exposed && expansion > 0 ? surface : null
+    Item {
+        id: overlay
+        parent: root.barWindow?.islandOverlay ?? root
+        anchors.fill: parent
+        visible: root.exposed
+    }
+    ClippingRectangle {
+        id: surface
+        parent: overlay
+        x: root.interpolate(root.compactBounds.x, root.expandedBounds.x)
+        y: root.interpolate(root.compactBounds.y, root.expandedBounds.y)
+        width: root.interpolate(root.compactBounds.width, root.expandedBounds.width)
+        height: root.interpolate(root.compactBounds.height, root.expandedBounds.height)
+        radius: root.interpolate(Math.min(root.compactBounds.width, root.compactBounds.height) / 2, 24)
+        color: {
+            const base = root.groupBackground?.color ?? (root.isMaterial ? root.materialPillColor : Appearance.colors.colLayer0);
+            return ColorUtils.applyAlpha(base, base.a + (1 - base.a) * Math.min(1, root.expansion * 3));
+        }
+        visible: root.exposed && root.expansion > 0
+        focus: root.expanded
+        Keys.onEscapePressed: event => { root.expanded = false; event.accepted = true; }
+        StyledRectangularShadow { parent: surface; target: surface; opacity: root.expansion; z: -1 }
+        Loader {
+            id: playerLoader
+            anchors.centerIn: parent
+            width: root.playerWidth
+            height: root.playerHeight
+            active: root.exposed && root.activePlayer !== null
+            asynchronous: true
+            onStatusChanged: if (status === Loader.Ready && root.expanded) root.expansion = 1
+            opacity: Math.max(0, (root.expansion - 0.25) / 0.75)
+            enabled: root.expanded && root.expansion > 0.95
+            z: 1
+            layer.enabled: true
+            layer.smooth: true
+            sourceComponent: PlayerControl {
+                player: root.activePlayer
+                visualizerPoints: GlobalStates.visualizerPoints
+                animateTrackChanges: false
+                backgroundMargin: 0
+                radius: 24
+            }
+        }
+    }
 
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
@@ -131,6 +284,7 @@ Item {
 
     MouseArea {
         anchors.fill: parent
+        enabled: root.exposed && !root.expanded && root.expansion === 0
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton | Qt.RightButton | Qt.LeftButton
         hoverEnabled: !Config.options.bar.tooltips.clickToShow
         onPressed: event => {
@@ -140,13 +294,45 @@ Item {
                 activePlayer?.previous();
             else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton)
                 activePlayer?.next();
-            else if (event.button === Qt.LeftButton) {
-                if (GlobalStates.mediaControlsOpen)
-                    root.updateWidgetPosition();
-                GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
-            }
+        }
+        onClicked: event => {
+            if (event.button === Qt.LeftButton && root.activePlayer) root.expanded = true;
+        }
+        onWheel: event => {
+            if (event.angleDelta.y === 0) return;
+            WM.switchWorkspaceRelative(event.angleDelta.y < 0 ? "next" : "prev");
+            event.accepted = true;
         }
     }
+    DragHandler {
+        id: pullGesture
+        target: null
+        enabled: root.activePlayer !== null && !root.expanded && (root.expansion === 0 || root.dragging)
+        acceptedButtons: Qt.LeftButton
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+        xAxis.enabled: root.vertical
+        yAxis.enabled: !root.vertical
+        onActiveChanged: {
+            if (active) root.beginPull();
+            else if (root.dragging) root.cancelPull();
+        }
+        onTranslationChanged: {
+            const distance = root.vertical ? activeTranslation.x : activeTranslation.y;
+            if (active) root.updatePull(distance * (Config.options.bar.bottom ? -1 : 1));
+        }
+        onCanceled: if (root.dragging) root.cancelPull()
+    }
+
+    Item {
+        id: compactContent
+        parent: root.expansion > 0 ? surface : root
+        anchors.centerIn: parent
+        width: root.expansion > 0 ? root.compactBounds.width : root.width
+        height: root.expansion > 0 ? root.compactBounds.height : root.height
+        opacity: Math.max(0, 1 - root.expansion * 3)
+        enabled: root.expansion === 0
+        layer.enabled: root.expansion > 0
+        layer.smooth: true
 
     // Vertical default
     Loader {
@@ -222,14 +408,16 @@ Item {
                     }
                 }
             }
-            StyledText {
+            ScrollingText {
                 visible: Config.options.bar.verbose
                 Layout.alignment: Qt.AlignVCenter
                 Layout.fillWidth: true
+                Layout.preferredHeight: implicitHeight
                 Layout.rightMargin: 0
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
                 color: Appearance.colors.colOnLayer1
+                font.family: Appearance.font.family.main
+                backgroundColor: ColorUtils.applyAlpha(root.groupBackground?.color ?? Appearance.colors.colLayer0, 1)
+                scrollOnlyOnOverflow: true
                 text: Config.options.bar.media.onlyTitle ? root.cleanedTitle : `${root.cleanedTitle}${root.activePlayer?.trackArtist ? ' • ' + root.activePlayer.trackArtist : ''}`
             }
         }
@@ -406,37 +594,18 @@ Item {
                                 }
                             }
                         }
-                        StyledText {
-                            id: titleText
+                        ScrollingText {
                             Layout.topMargin: (!root.activePlayer || root.trackArtist.length === 0) ? -13 : 0
+                            Layout.maximumWidth: 120
+                            Layout.preferredWidth: Math.min(120, implicitWidth)
+                            Layout.preferredHeight: implicitHeight
                             text: StringUtils.cleanMusicTitle(root.trackTitle) || Translation.tr("No media")
                             font.pixelSize: Appearance.font.pixelSize.smallie
+                            font.family: Appearance.font.family.main
                             color: root.blendedColors.colOnLayer0
-                            elide: Text.ElideRight
-                            Layout.maximumWidth: 120
-                            Behavior on text {
-                                SequentialAnimation {
-                                    NumberAnimation {
-                                        target: titleText
-                                        property: "x"
-                                        to: -artistText.width
-                                        duration: 150
-                                        easing.type: Easing.InQuad
-                                    }
-                                    PropertyAction {
-                                        target: titleText
-                                        property: "text"
-                                    }
-                                    NumberAnimation {
-                                        target: titleText
-                                        property: "x"
-                                        from: artistText.width
-                                        to: 0
-                                        duration: 150
-                                        easing.type: Easing.OutQuad
-                                    }
-                                }
-                            }
+                            backgroundColor: ColorUtils.applyAlpha(root.blendedColors.colLayer0, 1)
+                            centered: false
+                            scrollOnlyOnOverflow: true
                         }
                     }
 
@@ -482,5 +651,6 @@ Item {
                 }
             }
         }
+    }
     }
 }

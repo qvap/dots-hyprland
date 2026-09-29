@@ -72,19 +72,26 @@ Scope {
                     }
                 }
                 property bool superShow: false
-                readonly property bool islandInteracting: islandItem?.interacting ?? false
+                readonly property bool islandInteracting: (islandItem?.interacting ?? false) || (mediaItem?.interacting ?? false)
                 readonly property bool hasIsland: [Config.options.bar.layouts.leftLayout,
                     Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
                     .some(layout => layout.includes("island"))
+                readonly property bool hasMorphingMedia: [Config.options.bar.layouts.leftLayout,
+                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
+                    .some(layout => layout.includes("media"))
                 property var islandItem: null
+                property var mediaItem: null
                 property alias islandOverlay: islandOverlayLayer
-                readonly property bool islandExpanded: islandItem?.expanded ?? false
+                readonly property bool islandExpanded: (islandItem?.expanded ?? false) || (mediaItem?.expanded ?? false)
                 WlrLayershell.keyboardFocus: islandExpanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                 onIslandExpandedChanged: {
                     if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
                     else GlobalFocusGrab.removeDismissable(barRoot);
                 }
-                function close() { if (islandItem) islandItem.expanded = false; }
+                function close() {
+                    if (islandItem) islandItem.expanded = false;
+                    if (mediaItem) mediaItem.expanded = false;
+                }
                 // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
                 Item { id: islandOverlayLayer; anchors.fill: parent; z: 100 }
 
@@ -100,7 +107,7 @@ Scope {
                 // Overlay layer only while special workspace sits on top of a fullscreen window on this monitor,
                 // else Top layer so fullscreen apps cover the bar as normal (Hyprland buries Top layer under fullscreen+special).
                 WlrLayershell.layer: (monitorHasFullscreen && monitorHasSpecialOpen) ? WlrLayer.Overlay : WlrLayer.Top
-                implicitHeight: hasIsland ? Math.min(screen.height, Appearance.sizes.barHeight + Appearance.sizes.mediaControlsHeight + 32)
+                implicitHeight: hasIsland || hasMorphingMedia ? Math.min(screen.height, Appearance.sizes.barHeight + Appearance.sizes.mediaControlsHeight + 32)
                     : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
                 // When Overlay-layer, bar shares a layer with the screen-corner click zones (ScreenCorners.qml)
                 // and same-layer overlap is resolved by stacking, not layer priority - bar was winning and
@@ -119,6 +126,15 @@ Scope {
                         intersection: Intersection.Combine
                         item: barRoot.islandItem?.expandedSurface ?? null
                         radius: barRoot.islandItem?.expandedSurface?.radius ?? 0
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.mediaItem?.pullSurface ?? null
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.mediaItem?.expandedSurface ?? null
+                        radius: barRoot.mediaItem?.expandedSurface?.radius ?? 0
                     }
                     Region {
                         intersection: Intersection.Subtract

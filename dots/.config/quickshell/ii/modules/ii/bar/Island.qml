@@ -216,6 +216,7 @@ Item {
     onExpandedChanged: {
         if (expanded) {
             collapsing = false;
+            if (barWindow?.mediaItem) barWindow.mediaItem.expanded = false;
             if (expansion === 0) captureBounds();
             if (playerLoader.status === Loader.Ready) expansion = 1;
         } else {
