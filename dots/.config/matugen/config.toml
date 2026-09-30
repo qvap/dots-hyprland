@@ -33,7 +33,12 @@ output_path = '~/.local/state/quickshell/user/generated/color.txt'
 input_path = '~/.config/matugen/templates/wallpaper.txt'
 output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
 
-[templates.mpv_modernz]
-input_path = '~/.config/matugen/templates/mpv/modernz-md3.conf'
-output_path = '~/.config/matugen/generated/modernz-md3.conf'
-post_hook = '~/.config/matugen/hooks/modernz-md3.sh'
+#[templates.mpv_modernz] this shi is outdated
+#input_path = '~/.config/matugen/templates/mpv/modernz-md3.conf'
+#output_path = '~/.config/matugen/generated/modernz-md3.conf'
+#post_hook = '~/.config/matugen/hooks/modernz-md3.sh'
+
+[templates.material-osc]
+input_path = "~/.config/matugen/templates/mpv/osc-material.conf"
+output_path = "~/.config/matugen/generated/mpv-osc-material-color.conf"
+post_hook = "~/.config/matugen/hooks/mpv-osc-material.sh"
