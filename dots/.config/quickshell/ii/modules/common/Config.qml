@@ -456,6 +456,24 @@ Singleton {
                 property string userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
             }
 
+            property JsonObject vpn: JsonObject {
+                // The old custom_rules.json (and subscription URL) was read
+                // into the routing below / the overlay (services/Vpn.qml)
+                property bool migrated: false
+                // Split routing, put in force by "Apply" (VPN details >
+                // Routing; restarts sing-box). Syntax: scripts/vpn/routing.py
+                property JsonObject routing: JsonObject {
+                    property string defaultRoute: "proxy" // Unmatched traffic: "proxy" | "direct"
+                    // First match wins: { action: "proxy" | "direct" | "block", match: ["geoip:ru",
+                    // "geosite:youtube", "domain:example.com", "process:steam", ...], enabled: true }
+                    property list<var> rules: []
+                    property bool fakeip: false // Fake DNS answers for the TUN; may break some apps
+                    property string remoteDns: "8.8.8.8" // DoH server, queried through the proxy
+                    property int hysteria2UpMbps: 0 // 0 = what the subscription says
+                    property int hysteria2DownMbps: 0
+                }
+            }
+
             property JsonObject notifications: JsonObject {
                 property string position: "top_right"
                 property int timeout: 7000

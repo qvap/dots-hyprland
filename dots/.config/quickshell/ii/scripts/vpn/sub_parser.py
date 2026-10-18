@@ -3,8 +3,15 @@
 # Replicates Throne's Subscription::RawUpdater dispatch/parse behaviour and
 # emits a sing-box >= 1.12 (target 1.13.12) configuration.
 #
-# Argv: <config_path> <raw_subscription_file> [custom_rules_file]
+# Argv: <config_path> <raw_subscription_file> [extras_path]
 # Exit 0 on success (config written), 1 on failure (no nodes / read error).
+# The config is the subscription's part only (nodes, DNS, TUN): routing rules,
+# FakeIP, the remote DNS server and Hysteria2 speeds are composed in later by
+# routing.py (virtualprivatenetwork.sh), so a settings change does not need
+# the subscription again.
+# extras_path: link parameters sing-box has no field for but Xray does
+# (REALITY spiderX, gRPC authority / multi mode, XHTTP), JSON { tag: { ... } }
+# for xray_split.py, which moves such nodes to Xray.
 
 import base64
 import json
@@ -19,15 +26,9 @@ OUTBOUNDS = []
 ENDPOINTS = []
 ORDER_TAGS = []
 _USED_TAGS = set()
-CUSTOM_RULES_PATH = "/etc/illogical-impulse/sing-box/custom_rules.json"
-CUSTOM_SETTINGS = {}
-
-GEOSITE_RULE_SET_URL = (
-    "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-%s.srs"
-)
-GEOIP_RULE_SET_URL = (
-    "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-%s.srs"
-)
+EXTRAS = {}  # tag -> Xray-only link parameters (see the header)
+# The TUN's name: the kill switch (virtualprivatenetwork.sh) lets it through.
+TUN_NAME = "ii-tun"
 
 UTLS_FP = {
     "chrome",
@@ -63,6 +64,19 @@ def add_outbound(ob):
     ob["tag"] = _uniq_tag(ob.get("tag"))
     OUTBOUNDS.append(ob)
     ORDER_TAGS.append(ob["tag"])
+
+
+def remember_extras(tag, q):
+    """Xray-only parameters of a share link (sing-box drops them)."""
+    e = {}
+    if q.get("spx"):
+        e["spiderX"] = q["spx"]
+    if q.get("authority"):
+        e["authority"] = q["authority"]
+    if q.get("mode", "").lower() == "multi" and q.get("type", "").lower() == "grpc":
+        e["multiMode"] = True
+    if e:
+        EXTRAS[tag] = e
 
 
 def add_endpoint(ep):
@@ -124,11 +138,6 @@ def as_list(v):
     return [v]
 
 
-def safe_rule_set_tag(kind, name):
-    name = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(name).strip().lower())
-    return "%s-%s" % (kind, name)
-
-
 def mbps_value(v):
     if v in (None, ""):
         return None
@@ -169,27 +178,8 @@ def apply_hysteria2_tuning(ob, settings=None, hysteria=None, stream=None):
     hysteria = hysteria or {}
     stream = stream or {}
 
+    # (The user's own speeds, if set, override these in routing.py.)
     up, down = hysteria_bandwidth(settings, hysteria)
-    custom = (
-        CUSTOM_SETTINGS.get("hysteria2") if isinstance(CUSTOM_SETTINGS, dict) else None
-    )
-    if isinstance(custom, dict):
-        up = (
-            mbps_value(
-                custom.get("up_mbps") or custom.get("upMbps") or custom.get("up")
-            )
-            or up
-        )
-        down = (
-            mbps_value(
-                custom.get("down_mbps") or custom.get("downMbps") or custom.get("down")
-            )
-            or down
-        )
-        for key in ("network", "brutal_debug"):
-            if key in custom:
-                ob[key] = custom[key]
-
     if up:
         ob["up_mbps"] = up
     if down:
@@ -270,7 +260,17 @@ def build_transport(net, q, host_header=""):
             t["host"] = host
         return t
     if net in ("xhttp", "splithttp"):
-        return None
+        # XHTTP (xray-core's `splithttp`) has no sing-box transport: such a
+        # node is moved to Xray by xray_split.py, which reads this.
+        t = {"type": "xhttp"}
+        if path and path != "/":
+            t["path"] = path
+        if host:
+            t["host"] = [h for h in host.split(",") if h]
+        mode = q.get("mode", "")
+        if mode in ("auto", "packet-up", "stream-up", "stream-one"):
+            t["mode"] = mode
+        return t
     if net in ("h2", "http"):
         t = {"type": "http"}
         if path and path != "/":
@@ -318,6 +318,7 @@ def parse_vless(line):
     if tr:
         ob["transport"] = tr
     add_outbound(ob)
+    remember_extras(ob["tag"], q)
 
 
 def parse_vmess(line):
@@ -395,6 +396,7 @@ def parse_trojan(line):
     if tr:
         ob["transport"] = tr
     add_outbound(ob)
+    remember_extras(ob["tag"], q)
 
 
 def parse_hysteria2(line):
@@ -952,6 +954,16 @@ def _xray_stream_transport(stream):
         tr = {"type": "ws", "path": path}
         if host:
             tr["headers"] = {"Host": host}
+        return tr
+    if network in ("xhttp", "splithttp"):
+        xh = stream.get("xhttpSettings") or stream.get("splithttpSettings") or {}
+        tr = {"type": "xhttp"}
+        if xh.get("path") and xh.get("path") != "/":
+            tr["path"] = xh["path"]
+        if xh.get("host"):
+            tr["host"] = xh["host"] if isinstance(xh["host"], list) else [xh["host"]]
+        if xh.get("mode") in ("auto", "packet-up", "stream-up", "stream-one"):
+            tr["mode"] = xh["mode"]
         return tr
     if network in ("h2", "http"):
         http = stream.get("httpSettings", {}) or {}
@@ -1633,153 +1645,7 @@ def update(text, need_parse=True):
 # ---------------------------------------------------------------------------
 # Config builder (sing-box 1.14 schema)
 # ---------------------------------------------------------------------------
-def load_custom_settings(custom_rules_path=None):
-    custom_rules_path = custom_rules_path or CUSTOM_RULES_PATH
-    try:
-        with open(custom_rules_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def build_custom_route_config(custom_rules_path=None):
-    custom_rules_path = custom_rules_path or CUSTOM_RULES_PATH
-    try:
-        with open(custom_rules_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        return [], [], []
-    except Exception as e:
-        sys.stderr.write("warning: failed to load custom rules: %s\n" % e)
-        return [], [], []
-
-    if isinstance(data, list):
-        data = {"rules": data}
-    if not isinstance(data, dict):
-        return [], [], []
-
-    route_rules = []
-    dns_rules = []
-    rule_sets = []
-    rule_set_tags = set()
-
-    dns_domain_keys = ("domain", "domain_suffix", "domain_keyword", "domain_regex")
-
-    for rs in as_list(data.get("rule_sets")):
-        if isinstance(rs, dict) and rs.get("tag"):
-            rule_sets.append(rs)
-            rule_set_tags.add(rs.get("tag"))
-
-    for source_rule in as_list(data.get("rules")):
-        if not isinstance(source_rule, dict):
-            continue
-
-        if source_rule.get("raw") is True:
-            raw_rule = {k: v for k, v in source_rule.items() if k != "raw"}
-            if raw_rule:
-                route_rules.append(raw_rule)
-            continue
-
-        rule = {}
-        action = source_rule.get("action", "route")
-        outbound = source_rule.get("outbound", "proxy")
-        rule["action"] = action
-        if action == "route":
-            rule["outbound"] = outbound
-
-        for key in (
-            "domain",
-            "domain_suffix",
-            "domain_keyword",
-            "domain_regex",
-            "ip_cidr",
-            "source_ip_cidr",
-            "port",
-            "port_range",
-            "process_name",
-            "process_path",
-            "package_name",
-            "network",
-            "protocol",
-            "inbound",
-        ):
-            values = as_list(source_rule.get(key))
-            if values:
-                rule[key] = values
-
-        custom_sets = as_list(source_rule.get("rule_set"))
-        geoip_sets = [
-            safe_rule_set_tag("geoip", name)
-            for name in as_list(source_rule.get("geoip"))
-        ]
-        geosite_sets = [
-            safe_rule_set_tag("geosite", name)
-            for name in as_list(source_rule.get("geosite"))
-        ]
-        all_sets = custom_sets + geoip_sets + geosite_sets
-        if all_sets:
-            rule["rule_set"] = all_sets
-
-        for name, tag in zip(as_list(source_rule.get("geoip")), geoip_sets):
-            if tag not in rule_set_tags:
-                rule_sets.append(
-                    {
-                        "tag": tag,
-                        "type": "remote",
-                        "format": "binary",
-                        "url": GEOIP_RULE_SET_URL % str(name).strip().lower(),
-                        "download_detour": "direct",
-                    }
-                )
-                rule_set_tags.add(tag)
-
-        for name, tag in zip(as_list(source_rule.get("geosite")), geosite_sets):
-            if tag not in rule_set_tags:
-                rule_sets.append(
-                    {
-                        "tag": tag,
-                        "type": "remote",
-                        "format": "binary",
-                        "url": GEOSITE_RULE_SET_URL % str(name).strip().lower(),
-                        "download_detour": "direct",
-                    }
-                )
-                rule_set_tags.add(tag)
-
-        if len(rule) > 1:
-            route_rules.append(rule)
-
-        dns_match = {}
-        for key in dns_domain_keys:
-            values = as_list(source_rule.get(key))
-            if values:
-                dns_match[key] = values
-        dns_sets = custom_sets + geosite_sets
-        if dns_sets:
-            dns_match["rule_set"] = dns_sets
-        if dns_match:
-            if action == "route" and outbound == "direct":
-                dns_rules.append(
-                    {"action": "route", "server": "dns-direct", **dns_match}
-                )
-            elif action == "reject" or outbound in ("block", "reject"):
-                dns_rules.append({"action": "reject", **dns_match})
-
-    return route_rules, rule_sets, dns_rules
-
-
-def _dns_settings():
-    dns = CUSTOM_SETTINGS.get("dns") if isinstance(CUSTOM_SETTINGS, dict) else None
-    return dns if isinstance(dns, dict) else {}
-
-
 def build_config():
-    dns_opts = _dns_settings()
-    fakeip_enabled = bool(dns_opts.get("fakeip", False))
-    remote_dns = dns_opts.get("remote") or "8.8.8.8"
-    dns_strategy = dns_opts.get("strategy", "prefer_ipv4")
-
     proxy_members = list(ORDER_TAGS)
     selector = {
         "type": "selector",
@@ -1802,8 +1668,6 @@ def build_config():
                 if addr not in server_domains:
                     server_domains.append(addr)
 
-    custom_route_rules, custom_rule_sets, custom_dns_rules = build_custom_route_config()
-
     dns_rules = [
         {
             "action": "predefined",
@@ -1821,47 +1685,16 @@ def build_config():
         },
     ]
 
+    # The proxy servers' own names resolve direct: reaching a node must not
+    # need the node.
     if server_domains:
         dns_rules.append(
             {"action": "route", "domain": server_domains, "server": "dns-direct"}
         )
 
-    dns_rules.extend(custom_dns_rules)
-
-    if fakeip_enabled:
-        dns_rules.append(
-            {
-                "action": "route",
-                "domain_suffix": ["scdn.co", "spotify.com", "spotifycdn.com"],
-                "server": "dns-remote",
-            }
-        )
-        dns_rules.append(
-            {
-                "action": "route",
-                "inbound": "tun-in",
-                "server": "dns-fakeip",
-                "strategy": "ipv4_only",
-                "disable_cache": True,
-            }
-        )
-
-    base_route_rules = (
-        [
-            {"action": "sniff", "inbound": "dns-in"},
-            {"action": "hijack-dns", "inbound": "dns-in", "protocol": "dns"},
-            {"action": "reject", "inbound": "dns-in"},
-            {"action": "sniff", "inbound": ["mixed-in", "tun-in"]},
-            {
-                "action": "reject",
-                "network": "udp",
-                "port": 443,
-                "domain_suffix": ["scdn.co", "spotify.com", "spotifycdn.com"],
-            },
-        ]
-        + custom_route_rules
-        + [{"action": "hijack-dns", "protocol": "dns"}]
-    )
+    # Catch-all (routing.py points it where unmatched traffic goes and puts
+    # its own rules in front of it).
+    dns_rules.append({"action": "route", "server": "dns-remote"})
 
     dns_servers = [
         {
@@ -1871,53 +1704,37 @@ def build_config():
             # selected proxy. 443 is universally allowed and harder to block.
             "detour": "proxy",
             "domain_resolver": "dns-direct",
-            "server": remote_dns,
+            "server": "8.8.8.8",
             "tag": "dns-remote",
             "type": "https",
         },
         {"tag": "dns-direct", "type": "local"},
         {"tag": "dns-local", "type": "local"},
     ]
-    if fakeip_enabled:
-        dns_servers.append(
-            {
-                "tag": "dns-fakeip",
-                "type": "fakeip",
-                "inet4_range": "198.18.0.0/15",
-                "inet6_range": "fc00::/18",
-            }
-        )
 
     cfg = {
         "certificate": {"store": "system"},
         "dns": {
             "final": "dns-remote",
-            "strategy": dns_strategy,
+            "strategy": "prefer_ipv4",
             "rules": dns_rules,
             "servers": dns_servers,
         },
         "endpoints": ENDPOINTS,
         "experimental": {
-            "cache_file": {"enabled": True, "store_fakeip": True, "store_rdrc": True},
-            "clash_api": {"default_mode": "", "external_controller": "127.0.0.1:9090"},
+            # No clash_api: an API on a local port without a secret lets any
+            # local program (or web page) switch nodes and watch connections.
+            "cache_file": {"enabled": True, "store_fakeip": True, "store_dns": True},
         },
+        # TUN only: a local mixed / DNS port without a password lets any
+        # program on the machine ride the tunnel and learn the server's
+        # address; TUN's hijack-dns already takes all DNS.
         "inbounds": [
-            {
-                "listen": "127.0.0.1",
-                "listen_port": 5533,
-                "tag": "dns-in",
-                "type": "direct",
-            },
-            {
-                "listen": "127.0.0.1",
-                "listen_port": 2080,
-                "tag": "mixed-in",
-                "type": "mixed",
-            },
             {
                 "address": ["172.19.0.1/24", "fdfe:dcba:9876::1/126"],
                 "auto_redirect": True,
                 "auto_route": True,
+                "interface_name": TUN_NAME,
                 "mtu": 1500,
                 "route_exclude_address": ["127.0.0.0/8"],
                 "stack": "system",
@@ -1933,8 +1750,16 @@ def build_config():
             "default_domain_resolver": {"server": "dns-direct", "strategy": ""},
             "final": "proxy",
             "find_process": True,
-            "rule_set": custom_rule_sets,
-            "rules": base_route_rules,
+            "rules": [
+                {"action": "sniff", "inbound": "tun-in"},
+                {
+                    "action": "reject",
+                    "network": "udp",
+                    "port": 443,
+                    "domain_suffix": ["scdn.co", "spotify.com", "spotifycdn.com"],
+                },
+                {"action": "hijack-dns", "protocol": "dns"},
+            ],
         },
     }
 
@@ -1944,11 +1769,8 @@ def build_config():
 def main():
     if len(sys.argv) < 3:
         sys.exit(1)
-    global CUSTOM_RULES_PATH, CUSTOM_SETTINGS
     config_path, raw_file = sys.argv[1], sys.argv[2]
-    if len(sys.argv) >= 4:
-        CUSTOM_RULES_PATH = sys.argv[3]
-    CUSTOM_SETTINGS = load_custom_settings(CUSTOM_RULES_PATH)
+    extras_path = sys.argv[3] if len(sys.argv) > 3 else None
     try:
         with open(raw_file, "r", encoding="utf-8", errors="replace") as f:
             raw = f.read().strip()
@@ -1964,6 +1786,9 @@ def main():
 
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(build_config(), f, indent=2, ensure_ascii=False)
+    if extras_path:
+        with open(extras_path, "w", encoding="utf-8") as f:
+            json.dump(EXTRAS, f, ensure_ascii=False)
     sys.stderr.write("parsed %d node(s)\n" % len(ORDER_TAGS))
 
 

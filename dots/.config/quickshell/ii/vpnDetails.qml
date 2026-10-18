@@ -38,41 +38,6 @@ ApplicationWindow {
         }
     ]
 
-    function statusText() {
-        if (Vpn.status === "active")
-            return Translation.tr("Connected");
-        if (Vpn.status === "connecting")
-            return Translation.tr("Connecting");
-        return Translation.tr("Disconnected");
-    }
-
-    function ruleTitle(rule) {
-        if (!rule)
-            return Translation.tr("Rule");
-        if (rule.action === "reject")
-            return Translation.tr("Block");
-        return rule.outbound || Translation.tr("Rule");
-    }
-
-    function isRoutingError(message) {
-        const normalized = message.toLowerCase();
-        return normalized.includes("invalid") || normalized.includes("failed") || normalized.includes("unsupported") || normalized.includes("does not exist") || normalized.includes("unavailable") || normalized.includes("error");
-    }
-
-    function ruleSummary(rule) {
-        if (!rule)
-            return "";
-        const keys = ["domain", "domain_suffix", "domain_keyword", "domain_regex", "geoip", "geosite", "ip_cidr"];
-        let parts = [];
-        for (let i = 0; i < keys.length; i++) {
-            const key = keys[i];
-            const values = rule[key];
-            if (values && values.length !== undefined && values.length > 0)
-                parts.push(key + ": " + values.join(", "));
-        }
-        return parts.length > 0 ? parts.join(" · ") : JSON.stringify(rule);
-    }
-
     visible: true
     onClosing: Qt.quit()
     title: "illogical-impulse VPN Details"
@@ -86,7 +51,6 @@ ApplicationWindow {
     Component.onCompleted: {
         MaterialThemeLoader.reapplyTheme();
         Vpn.refresh();
-        Vpn.refreshRules();
     }
 
     ColumnLayout {
@@ -334,7 +298,7 @@ ApplicationWindow {
                             implicitHeight: 120
                             rotation: continuousRotation + leapRotation
 
-                            property bool loading: Vpn.status === "connecting"
+                            property bool loading: Vpn.status === "connecting" || Vpn.status === "disconnecting"
                             property double baseShapeSize: 120
                             property double leapZoomSize: 120 * 1.2
                             property double leapZoomProgress: 0
@@ -404,7 +368,7 @@ ApplicationWindow {
                                     const progressSecondHalf = Math.max(vpnCookie.leapZoomProgress - 0.5, 0) * 2;
                                     return vpnCookie.baseShapeSize + leapZoomDiff * progressFirstHalf - leapZoomDiff * progressSecondHalf;
                                 }
-                                color: (Vpn.status === "active" || Vpn.status === "connecting") ? (vpnMouseArea.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer) : (vpnMouseArea.containsMouse ? Appearance.colors.colLayer3Hover : ColorUtils.transparentize(Appearance.colors.colLayer3))
+                                color: Vpn.blocking ? Appearance.colors.colErrorContainer : Vpn.on ? (vpnMouseArea.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer) : (vpnMouseArea.containsMouse ? Appearance.colors.colLayer3Hover : ColorUtils.transparentize(Appearance.colors.colLayer3))
 
                                 Behavior on color {
                                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(shape)
@@ -416,9 +380,9 @@ ApplicationWindow {
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: "power_settings_new"
+                            text: Vpn.blocking ? "gpp_bad" : "power_settings_new"
                             iconSize: 42
-                            color: (Vpn.status === "active" || Vpn.status === "connecting") ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+                            color: Vpn.blocking ? Appearance.colors.colOnErrorContainer : Vpn.on ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
                         }
 
                         ButtonMouseArea {
@@ -434,7 +398,8 @@ ApplicationWindow {
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: root.statusText()
+                            text: Vpn.statusText
+                            wrapMode: Text.Wrap
                             font.pixelSize: Appearance.font.pixelSize.huge
                             font.weight: 600
                             color: Appearance.colors.colOnLayer1
@@ -447,7 +412,29 @@ ApplicationWindow {
                             color: Appearance.colors.colSubtext
                             font.pixelSize: Appearance.font.pixelSize.normal
                         }
+
+                        StyledText {
+                            visible: Vpn.lastError.length > 0
+                            Layout.fillWidth: true
+                            text: Vpn.lastError
+                            wrapMode: Text.Wrap
+                            color: Appearance.colors.colError
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                        }
                     }
+                }
+            }
+
+            NoticeBox {
+                visible: Vpn.blocking
+                Layout.fillWidth: true
+                materialIcon: "gpp_bad"
+                text: Translation.tr("The VPN is down and the kill switch blocks all traffic. Turn the VPN on again, or release the block.")
+
+                StyledButton {
+                    text: Translation.tr("Release block")
+                    enabled: Vpn.busy === ""
+                    onClicked: Vpn.release()
                 }
             }
         }
@@ -457,6 +444,78 @@ ApplicationWindow {
             title: Translation.tr("Active node")
 
             ProfileSelector {}
+        }
+
+        ContentSection {
+            icon: "shield_lock"
+            title: Translation.tr("Connection")
+
+            ConfigSwitch {
+                id: autostartSwitch
+                buttonIcon: "start"
+                text: Vpn.busy === "autostart" ? Translation.tr("Applying...") : Translation.tr("Start at boot")
+                enabled: Vpn.busy === ""
+                checked: Vpn.enabled
+                onCheckedChanged: {
+                    if (checked !== Vpn.enabled)
+                        Vpn.setAutostart(checked);
+                }
+                Connections {
+                    target: Vpn
+                    // A dismissed password prompt: back to the truth
+                    function onBusyChanged() {
+                        if (Vpn.busy === "")
+                            autostartSwitch.checked = Qt.binding(() => Vpn.enabled);
+                    }
+                }
+            }
+
+            ConfigSwitch {
+                id: killswitchSwitch
+                buttonIcon: "gpp_maybe"
+                text: Vpn.busy === "killswitch" ? Translation.tr("Applying...") : Translation.tr("Kill switch")
+                enabled: Vpn.busy === ""
+                checked: Vpn.killswitch
+                onCheckedChanged: {
+                    if (checked !== Vpn.killswitch)
+                        Vpn.setKillswitch(checked);
+                }
+                Connections {
+                    target: Vpn
+                    function onBusyChanged() {
+                        if (Vpn.busy === "")
+                            killswitchSwitch.checked = Qt.binding(() => Vpn.killswitch);
+                    }
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                text: Translation.tr("While the VPN is on, the kill switch lets traffic out only through the tunnel (and to the local network). If sing-box crashes, everything stays blocked until the VPN is back or you release the block; turning the VPN off lifts it. Needs nftables.")
+            }
+
+            ConfigRow {
+                uniform: true
+                ActionButton {
+                    text: Vpn.busy === "restart" ? Translation.tr("Restarting...") : Translation.tr("Restart")
+                    enabled: Vpn.busy === "" && Vpn.on
+                    onClicked: Vpn.restart()
+                }
+                ActionButton {
+                    text: Translation.tr("Logs")
+                    onClicked: Vpn.openLogs()
+                }
+            }
+
+            ConfigRow {
+                visible: !Vpn.passwordless
+                uniform: true
+                ActionButton {
+                    text: Translation.tr("Turn on/off without password")
+                    enabled: Vpn.busy === ""
+                    onClicked: Vpn.setupPasswordless()
+                }
+            }
         }
 
         ContentSection {
@@ -492,9 +551,8 @@ ApplicationWindow {
 
             MaterialTextField {
                 id: detailsSubscriptionField
-                visible: Vpn.needsSubscription
                 Layout.fillWidth: true
-                placeholderText: Translation.tr("Subscription URL")
+                placeholderText: Vpn.hasSubscription ? Translation.tr("New subscription URL") : Translation.tr("Subscription URL")
                 text: Vpn.subscriptionUrl
                 onAccepted: Vpn.subscribe(text)
             }
@@ -502,14 +560,13 @@ ApplicationWindow {
             ConfigRow {
                 uniform: true
                 ActionButton {
-                    text: Vpn.isScanning ? Translation.tr("Loading...") : Translation.tr("Load subscription")
-                    visible: Vpn.needsSubscription
-                    enabled: !Vpn.isScanning
+                    text: Vpn.busy === "subscribe" ? Translation.tr("Loading...") : Translation.tr("Load subscription")
+                    enabled: Vpn.busy === "" && detailsSubscriptionField.text.trim().length > 0
                     onClicked: Vpn.subscribe(detailsSubscriptionField.text)
                 }
                 ActionButton {
-                    text: Vpn.isScanning ? Translation.tr("Updating...") : Translation.tr("Update subscription")
-                    enabled: !Vpn.isScanning && !Vpn.needsSubscription
+                    text: Vpn.busy === "update" ? Translation.tr("Updating...") : Translation.tr("Update subscription")
+                    enabled: Vpn.busy === "" && Vpn.hasSubscription
                     onClicked: Vpn.updateSubscription()
                 }
             }
@@ -526,9 +583,9 @@ ApplicationWindow {
                 ActionButton {
                     id: deleteSubscriptionButton
                     property bool oneClicked: false
-                    property string originalText: Vpn.isScanning ? Translation.tr("Loading...") : Translation.tr("Delete subscription")
+                    property string originalText: Vpn.busy === "unsubscribe" ? Translation.tr("Loading...") : Translation.tr("Delete subscription")
                     text: deleteSubscriptionButton.oneClicked ? Translation.tr("Click again to confirm") : deleteSubscriptionButton.originalText
-                    enabled: !Vpn.isScanning
+                    enabled: Vpn.busy === "" && (Vpn.hasSubscription || Vpn.profiles.length > 0)
                     onClicked: {
                         if (deleteSubscriptionButton.oneClicked === false) {
                             deleteSubscriptionButton.oneClicked = true;
@@ -551,10 +608,26 @@ ApplicationWindow {
             icon: "account_tree"
             title: Translation.tr("Nodes")
 
+            StyledText {
+                visible: Vpn.profiles.length === 0
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colSubtext
+                text: Translation.tr("No nodes yet: load a subscription on the Overview page.")
+            }
+
+            NoticeBox {
+                visible: Vpn.profiles.some(p => p.xray)
+                Layout.fillWidth: true
+                text: Translation.tr("Nodes marked \"xray\" (gRPC, XHTTP) run through Xray (xray.service): sing-box cannot carry them itself.")
+            }
+
             Repeater {
                 model: Vpn.profiles
                 delegate: Rectangle {
+                    id: nodeDelegate
                     required property var modelData
+                    readonly property bool switching: Vpn.busy === "select" && Vpn.selecting === modelData.tag
                     Layout.fillWidth: true
                     implicitHeight: nodeRow.implicitHeight + 22
                     radius: Appearance.rounding.normal
@@ -572,9 +645,9 @@ ApplicationWindow {
                         spacing: 12
 
                         MaterialSymbol {
-                            text: modelData.isActive ? "radio_button_checked" : "radio_button_unchecked"
+                            text: nodeDelegate.modelData.isActive ? "radio_button_checked" : "radio_button_unchecked"
                             iconSize: 22
-                            color: modelData.isActive ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
+                            color: nodeDelegate.modelData.isActive ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
                         }
 
                         ColumnLayout {
@@ -583,17 +656,17 @@ ApplicationWindow {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: modelData.name
+                                text: nodeDelegate.modelData.name
                                 elide: Text.ElideRight
-                                color: modelData.isActive ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
+                                color: nodeDelegate.modelData.isActive ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
                                 font.pixelSize: Appearance.font.pixelSize.normal
-                                font.weight: modelData.isActive ? Font.Medium : Font.Normal
+                                font.weight: nodeDelegate.modelData.isActive ? Font.Medium : Font.Normal
                             }
 
                             StyledText {
-                                text: modelData.type
-                                color: modelData.isActive ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
-                                opacity: modelData.isActive ? 0.72 : 1
+                                text: nodeDelegate.switching ? Translation.tr("Switching node...") : nodeDelegate.modelData.type
+                                color: nodeDelegate.modelData.isActive ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                                opacity: nodeDelegate.modelData.isActive ? 0.72 : 1
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                             }
                         }
@@ -601,9 +674,9 @@ ApplicationWindow {
                         ActionButton {
                             Layout.fillWidth: false
                             implicitWidth: 120
-                            text: modelData.isActive ? Translation.tr("Connected") : Translation.tr("Select")
-                            enabled: !modelData.isActive
-                            onClicked: Vpn.selectProfile(modelData.index)
+                            text: nodeDelegate.modelData.isActive ? Translation.tr("Connected") : Translation.tr("Select")
+                            enabled: !nodeDelegate.modelData.isActive && Vpn.busy === ""
+                            onClicked: Vpn.selectProfile(nodeDelegate.modelData.tag)
                         }
                     }
                 }
@@ -616,31 +689,105 @@ ApplicationWindow {
         forceWidth: true
         baseWidth: 620
 
-        property string outbound: "proxy"
-        property string ruleType: "domain_suffix"
+        property string action: "direct"
+        property string kind: "domain"
+        property string overlayError: ""
+        readonly property var kinds: [
+            {
+                displayName: Translation.tr("Domain"),
+                value: "domain",
+                hint: "example.com"
+            },
+            {
+                displayName: Translation.tr("Exact domain"),
+                value: "full",
+                hint: "www.example.com"
+            },
+            {
+                displayName: Translation.tr("Keyword"),
+                value: "keyword",
+                hint: "google"
+            },
+            {
+                displayName: "Regex",
+                value: "regexp",
+                hint: "^.+\\.example\\.com$"
+            },
+            {
+                displayName: "IP CIDR",
+                value: "ip",
+                hint: "10.0.0.0/8"
+            },
+            {
+                displayName: "Geosite",
+                value: "geosite",
+                hint: "youtube\ncategory-ru\ndiscord@metacubex"
+            },
+            {
+                displayName: "GeoIP",
+                value: "geoip",
+                hint: "ru\ntelegram"
+            },
+            {
+                displayName: Translation.tr("App"),
+                value: "process",
+                hint: "telegram-desktop\nsteam"
+            },
+            {
+                displayName: Translation.tr("App path"),
+                value: "path",
+                hint: "/usr/bin/firefox"
+            },
+            {
+                displayName: Translation.tr("Protocol"),
+                value: "protocol",
+                hint: "bittorrent\nquic"
+            }
+        ]
 
         function valuesFromText(text) {
             return text.split(/[\n,]+/).map(value => value.trim()).filter(value => value.length > 0);
         }
 
-        ContentSection {
-            icon: "dns"
-            title: Translation.tr("DNS")
+        NoticeBox {
+            visible: Vpn.pending
+            Layout.fillWidth: true
+            materialIcon: "alt_route"
+            text: Translation.tr("Routing changes are not applied yet. Applying restarts the VPN; if sing-box cannot start with them, the previous config is restored.")
 
-            ConfigSwitch {
-                buttonIcon: "frame_inspect"
-                text: Translation.tr("Enable FakeIP")
-                enabled: !Vpn.isRoutingBusy
-                checked: Vpn.fakeipEnabled
-                onCheckedChanged: {
-                    if (checked !== Vpn.fakeipEnabled)
-                        Vpn.setFakeip(checked);
-                }
+            StyledButton {
+                text: Vpn.isRoutingBusy ? Translation.tr("Applying...") : Translation.tr("Apply")
+                enabled: Vpn.busy === ""
+                onClicked: Vpn.applyRouting(false)
+            }
+        }
+
+        ContentSection {
+            icon: "call_split"
+            title: Translation.tr("Unmatched traffic")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.vpn.routing.defaultRoute
+                onSelected: newValue => Config.options.vpn.routing.defaultRoute = newValue
+                options: [
+                    {
+                        displayName: Translation.tr("Through VPN"),
+                        icon: "vpn_lock",
+                        value: "proxy"
+                    },
+                    {
+                        displayName: Translation.tr("Direct"),
+                        icon: "public",
+                        value: "direct"
+                    }
+                ]
             }
 
-            NoticeBox {
+            StyledText {
                 Layout.fillWidth: true
-                text: Translation.tr("FakeIP speeds up DNS resolution and prevents leaks, but may break some apps (Spotify, Discord, games). Disabled by default. Changing this rebuilds the config and restarts the VPN")
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colSubtext
+                text: Translation.tr("Where traffic no rule matches goes. The local network always goes direct; DNS follows the route (direct names resolve directly, so CDNs answer with nearby servers).")
             }
         }
 
@@ -648,94 +795,40 @@ ApplicationWindow {
             icon: "alt_route"
             title: Translation.tr("Create routing rule")
 
-            InfoCard {
-                icon: "description"
-                title: Translation.tr("Rules file")
-                value: Vpn.routingRulesPath
+            ContentSubsectionLabel {
+                text: Translation.tr("Action")
             }
 
-            NoticeBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Rules are saved through VPN service and merged into sing-box config after each apply or subscription update")
+            ConfigSelectionArray {
+                currentValue: routingRoot.action
+                onSelected: newValue => routingRoot.action = newValue
+                options: [
+                    {
+                        displayName: Translation.tr("Proxy"),
+                        icon: "vpn_lock",
+                        value: "proxy"
+                    },
+                    {
+                        displayName: Translation.tr("Direct"),
+                        icon: "public",
+                        value: "direct"
+                    },
+                    {
+                        displayName: Translation.tr("Block"),
+                        icon: "block",
+                        value: "block"
+                    }
+                ]
             }
 
             ContentSubsectionLabel {
-                text: Translation.tr("Outbound")
+                text: Translation.tr("Match by")
             }
 
-            Item {
-                Layout.fillWidth: true
-                implicitHeight: Math.max(outboundSelection.implicitHeight, outboundSelection.childrenRect.height)
-
-                ConfigSelectionArray {
-                    id: outboundSelection
-                    width: parent.width
-                    currentValue: routingRoot.outbound
-                    onSelected: newValue => routingRoot.outbound = newValue
-                    options: [
-                        {
-                            displayName: Translation.tr("Proxy"),
-                            icon: "vpn_lock",
-                            value: "proxy"
-                        },
-                        {
-                            displayName: Translation.tr("Direct"),
-                            icon: "public",
-                            value: "direct"
-                        },
-                        {
-                            displayName: Translation.tr("Block"),
-                            icon: "block",
-                            value: "block"
-                        }
-                    ]
-                }
-            }
-
-            ContentSubsectionLabel {
-                text: Translation.tr("Rule type")
-            }
-
-            Item {
-                Layout.fillWidth: true
-                implicitHeight: Math.max(ruleTypeSelection.implicitHeight, ruleTypeSelection.childrenRect.height)
-
-                ConfigSelectionArray {
-                    id: ruleTypeSelection
-                    width: parent.width
-                    currentValue: routingRoot.ruleType
-                    onSelected: newValue => routingRoot.ruleType = newValue
-                    options: [
-                        {
-                            displayName: "Domain",
-                            value: "domain"
-                        },
-                        {
-                            displayName: "Suffix",
-                            value: "domain_suffix"
-                        },
-                        {
-                            displayName: "Keyword",
-                            value: "domain_keyword"
-                        },
-                        {
-                            displayName: "Regex",
-                            value: "domain_regex"
-                        },
-                        {
-                            displayName: "GeoIP",
-                            value: "geoip"
-                        },
-                        {
-                            displayName: "Geosite",
-                            value: "geosite"
-                        },
-                        {
-                            displayName: "IP CIDR",
-                            value: "ip_cidr"
-                        }
-                    ]
-                }
+            ConfigSelectionArray {
+                currentValue: routingRoot.kind
+                onSelected: newValue => routingRoot.kind = newValue
+                options: routingRoot.kinds
             }
 
             Rectangle {
@@ -755,26 +848,29 @@ ApplicationWindow {
                     }
                     background: null
                     clip: true
-                    placeholderText: Translation.tr("Values, one per line or comma-separated") + "\nexample.com\nyoutube\nprivate"
+                    placeholderText: Translation.tr("Values, one per line or comma-separated") + "\n" + (routingRoot.kinds.find(k => k.value === routingRoot.kind)?.hint ?? "")
                     wrapMode: TextArea.Wrap
                 }
+            }
+
+            StyledText {
+                visible: routingRoot.kind === "geosite" || routingRoot.kind === "geoip"
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colSubtext
+                text: Translation.tr("Lists come from runetfreedom/russia-v2ray-rules-dat, MetaCubeX/meta-rules-dat and SagerNet (the first that has the name). Pin one with @: youtube@metacubex, ru@sagernet.")
             }
 
             ConfigRow {
                 uniform: true
                 ActionButton {
-                    text: Vpn.isRoutingBusy ? Translation.tr("Loading...") : Translation.tr("Add rule")
-                    enabled: !Vpn.isRoutingBusy
-                    onClicked: Vpn.addRoutingRule(routingRoot.outbound, routingRoot.ruleType, routingRoot.valuesFromText(ruleValuesField.text))
+                    text: Translation.tr("Add rule")
+                    enabled: ruleValuesField.text.trim().length > 0
+                    onClicked: {
+                        if (Vpn.addRule(routingRoot.action, routingRoot.kind, routingRoot.valuesFromText(ruleValuesField.text)))
+                            ruleValuesField.text = "";
+                    }
                 }
-            }
-
-            StyledText {
-                visible: Vpn.routingStatus.length > 0
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                color: root.isRoutingError(Vpn.routingStatus) ? Appearance.colors.colError : Appearance.colors.colSubtext
-                text: Translation.tr(Vpn.routingStatus)
             }
         }
 
@@ -783,23 +879,24 @@ ApplicationWindow {
             title: Translation.tr("Current rules")
 
             StyledText {
-                visible: Vpn.routingRuleItems.length === 0
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Appearance.colors.colSubtext
-                text: Translation.tr("No custom routing rules yet.")
+                text: Config.options.vpn.routing.rules.length === 0 ? Translation.tr("No custom routing rules yet.") : Translation.tr("Checked top to bottom, the first match wins.")
             }
 
             Repeater {
-                model: Vpn.routingRuleItems
+                model: Config.options.vpn.routing.rules
                 delegate: Rectangle {
                     id: ruleDelegate
                     required property var modelData
                     required property int index
+                    readonly property bool ruleEnabled: modelData.enabled !== false
                     Layout.fillWidth: true
                     implicitHeight: ruleRow.implicitHeight + 22
                     radius: Appearance.rounding.normal
                     color: Appearance.colors.colLayer1
+                    opacity: ruleEnabled ? 1 : 0.6
 
                     RowLayout {
                         id: ruleRow
@@ -808,12 +905,12 @@ ApplicationWindow {
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                             leftMargin: 14
-                            rightMargin: 14
+                            rightMargin: 8
                         }
-                        spacing: 12
+                        spacing: 8
 
                         MaterialSymbol {
-                            text: ruleDelegate.modelData.action === "reject" || ruleDelegate.modelData.outbound === "block" ? "block" : ruleDelegate.modelData.outbound === "direct" ? "public" : "vpn_lock"
+                            text: ruleDelegate.modelData.action === "block" ? "block" : ruleDelegate.modelData.action === "direct" ? "public" : "vpn_lock"
                             iconSize: 22
                             color: Appearance.colors.colOnLayer1
                         }
@@ -824,7 +921,7 @@ ApplicationWindow {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: (ruleDelegate.index + 1) + ". " + root.ruleTitle(ruleDelegate.modelData) + " · " + ruleDelegate.modelData.ruleType
+                                text: (ruleDelegate.index + 1) + ". " + (ruleDelegate.modelData.action === "block" ? Translation.tr("Block") : ruleDelegate.modelData.action === "direct" ? Translation.tr("Direct") : Translation.tr("Proxy"))
                                 elide: Text.ElideRight
                                 color: Appearance.colors.colOnLayer1
                                 font.pixelSize: Appearance.font.pixelSize.normal
@@ -833,27 +930,32 @@ ApplicationWindow {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: ruleDelegate.modelData.value
+                                text: (ruleDelegate.modelData.match ?? []).join(", ")
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
                                 elide: Text.ElideRight
                                 color: Appearance.colors.colSubtext
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                             }
                         }
 
-                        RippleButton {
-                            Layout.fillWidth: false
-                            implicitWidth: 36
-                            implicitHeight: 36
-                            buttonRadius: Appearance.rounding.full
-                            enabled: !Vpn.isRoutingBusy
-                            onClicked: Vpn.removeRoutingRuleItem(ruleDelegate.modelData)
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                horizontalAlignment: Text.AlignHCenter
-                                text: "delete"
-                                iconSize: 20
-                                color: Appearance.colors.colOnLayer1
-                            }
+                        StyledSwitch {
+                            checked: ruleDelegate.ruleEnabled
+                            onClicked: Vpn.setRuleEnabled(ruleDelegate.index, checked)
+                        }
+                        RuleButton {
+                            glyph: "arrow_upward"
+                            enabled: ruleDelegate.index > 0
+                            onClicked: Vpn.moveRule(ruleDelegate.index, -1)
+                        }
+                        RuleButton {
+                            glyph: "arrow_downward"
+                            enabled: ruleDelegate.index < Config.options.vpn.routing.rules.length - 1
+                            onClicked: Vpn.moveRule(ruleDelegate.index, 1)
+                        }
+                        RuleButton {
+                            glyph: "delete"
+                            onClicked: Vpn.removeRule(ruleDelegate.index)
                         }
                     }
                 }
@@ -862,20 +964,69 @@ ApplicationWindow {
             ConfigRow {
                 uniform: true
                 ActionButton {
-                    text: Translation.tr("Refresh")
-                    enabled: !Vpn.isRoutingBusy
-                    onClicked: Vpn.refreshRules()
+                    text: Vpn.isRoutingBusy ? Translation.tr("Applying...") : Translation.tr("Apply")
+                    enabled: Vpn.busy === "" && Vpn.pending
+                    onClicked: Vpn.applyRouting(false)
                 }
                 ActionButton {
-                    text: Translation.tr("Apply")
-                    enabled: !Vpn.isRoutingBusy
-                    onClicked: Vpn.applyRoutingRules()
+                    text: Translation.tr("Update lists")
+                    enabled: Vpn.busy === "" && Vpn.hasSubscription
+                    onClicked: Vpn.applyRouting(true)
                 }
                 ActionButton {
                     text: Translation.tr("Clear")
-                    enabled: !Vpn.isRoutingBusy && Vpn.routingRuleItems.length > 0
-                    onClicked: Vpn.clearRoutingRules()
+                    enabled: Config.options.vpn.routing.rules.length > 0
+                    onClicked: Vpn.clearRules()
                 }
+            }
+        }
+
+        ContentSection {
+            icon: "dns"
+            title: Translation.tr("DNS")
+
+            ConfigSwitch {
+                buttonIcon: "frame_inspect"
+                text: Translation.tr("Enable FakeIP")
+                checked: Config.options.vpn.routing.fakeip
+                onCheckedChanged: Config.options.vpn.routing.fakeip = checked
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                text: Translation.tr("FakeIP speeds up DNS resolution and prevents leaks, but may break some apps (Spotify, Discord, games). Disabled by default.")
+            }
+
+            MaterialTextField {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Remote DNS server (DoH, through the VPN)")
+                text: Config.options.vpn.routing.remoteDns
+                onEditingFinished: Config.options.vpn.routing.remoteDns = text.trim()
+            }
+        }
+
+        ContentSection {
+            icon: "speed"
+            title: "Hysteria2"
+
+            ConfigSpinBox {
+                icon: "upload"
+                text: Translation.tr("Upload, Mbps (0 = from the subscription)")
+                from: 0
+                to: 10000
+                stepSize: 10
+                value: Config.options.vpn.routing.hysteria2UpMbps
+                onValueChanged: Config.options.vpn.routing.hysteria2UpMbps = value
+            }
+
+            ConfigSpinBox {
+                icon: "download"
+                text: Translation.tr("Download, Mbps (0 = from the subscription)")
+                from: 0
+                to: 10000
+                stepSize: 10
+                value: Config.options.vpn.routing.hysteria2DownMbps
+                onValueChanged: Config.options.vpn.routing.hysteria2DownMbps = value
             }
         }
 
@@ -887,7 +1038,13 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Appearance.colors.colSubtext
-                text: Translation.tr("Edit the whole custom rules document when you need rule_sets or complex sing-box syntax")
+                text: Translation.tr("Your own sing-box JSON, merged over the generated config: objects merge, null deletes a key, outbounds / DNS servers / rule sets with the same tag are replaced, route and DNS rules here go first. Takes effect on Apply.")
+            }
+
+            InfoCard {
+                icon: "description"
+                title: Translation.tr("File")
+                value: Vpn.overlayPath
             }
 
             Rectangle {
@@ -896,11 +1053,11 @@ ApplicationWindow {
                 radius: Appearance.rounding.small
                 color: Appearance.m3colors.m3surface
                 border.width: 1
-                border.color: rawRulesEditor.activeFocus ? Appearance.m3colors.m3primary : Appearance.m3colors.m3outlineVariant
+                border.color: overlayEditor.activeFocus ? Appearance.m3colors.m3primary : Appearance.m3colors.m3outlineVariant
                 clip: true
 
                 ScrollView {
-                    id: rawRulesScroll
+                    id: overlayScroll
                     anchors {
                         fill: parent
                         margins: 8
@@ -910,36 +1067,47 @@ ApplicationWindow {
                     ScrollBar.horizontal.policy: ScrollBar.AsNeeded
 
                     StyledTextArea {
-                        id: rawRulesEditor
-                        width: rawRulesScroll.availableWidth
+                        id: overlayEditor
+                        width: overlayScroll.availableWidth
                         background: null
                         clip: true
-                        text: Vpn.routingRulesRaw
+                        text: Vpn.overlayText
+                        placeholderText: "{\n  \"route\": { \"rules\": [] }\n}"
                         font.family: Appearance.font.family.monospace
                         wrapMode: TextArea.Wrap
 
                         Connections {
                             target: Vpn
-                            function onRoutingRulesRawChanged() {
-                                if (!rawRulesEditor.activeFocus)
-                                    rawRulesEditor.text = Vpn.routingRulesRaw;
+                            function onOverlayTextChanged() {
+                                if (!overlayEditor.activeFocus)
+                                    overlayEditor.text = Vpn.overlayText;
                             }
                         }
                     }
                 }
             }
 
+            StyledText {
+                visible: routingRoot.overlayError.length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colError
+                text: routingRoot.overlayError
+            }
+
             ConfigRow {
                 uniform: true
                 ActionButton {
                     text: Translation.tr("Reload")
-                    enabled: !Vpn.isRoutingBusy
-                    onClicked: Vpn.refreshRules()
+                    onClicked: {
+                        overlayEditor.text = Vpn.overlayText;
+                        routingRoot.overlayError = "";
+                    }
                 }
                 ActionButton {
                     text: Translation.tr("Save JSON")
-                    enabled: !Vpn.isRoutingBusy
-                    onClicked: Vpn.setRoutingRules(rawRulesEditor.text)
+                    enabled: overlayEditor.text !== Vpn.overlayText
+                    onClicked: routingRoot.overlayError = Vpn.saveOverlay(overlayEditor.text)
                 }
             }
         }
@@ -971,10 +1139,8 @@ ApplicationWindow {
         currentIndex: Vpn.profiles.findIndex(item => item.isActive)
         onActivated: index => {
             const profile = Vpn.profiles[index];
-            if (profile && !profile.isActive) {
-                const profileIndex = profile.index !== undefined ? profile.index : index;
-                Vpn.selectProfile(profileIndex);
-            }
+            if (profile && !profile.isActive)
+                Vpn.selectProfile(profile.tag);
         }
 
         delegate: ItemDelegate {
@@ -1027,6 +1193,22 @@ ApplicationWindow {
         radius: Appearance.rounding.full
         colBackgroundUnchecked: Appearance.colors.colLayer2
         colForegroundUnchecked: Appearance.colors.colOnLayer2
+    }
+
+    component RuleButton: RippleButton {
+        required property string glyph
+        Layout.fillWidth: false
+        implicitWidth: 36
+        implicitHeight: 36
+        buttonRadius: Appearance.rounding.full
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            text: parent.glyph
+            iconSize: 20
+            color: Appearance.colors.colOnLayer1
+            opacity: parent.enabled ? 1 : 0.4
+        }
     }
 
     component InfoCard: Rectangle {
