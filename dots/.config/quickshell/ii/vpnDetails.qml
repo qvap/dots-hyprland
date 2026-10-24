@@ -691,7 +691,12 @@ ApplicationWindow {
 
         property string action: "direct"
         property string kind: "domain"
-        property string overlayError: ""
+        property string jsonError: ""
+        // The routing as saved in Config (what the editor shows unless edited)
+        readonly property string savedJson: {
+            Vpn.routing;
+            return Vpn.routingJson();
+        }
         readonly property var kinds: [
             {
                 displayName: Translation.tr("Domain"),
@@ -930,7 +935,11 @@ ApplicationWindow {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: (ruleDelegate.modelData.match ?? []).join(", ")
+                                // Without match: a hand-written sing-box rule, shown as its fields
+                                text: ruleDelegate.modelData.match !== undefined ? Array.from(ruleDelegate.modelData.match).join(", ") : JSON.stringify(Object.assign({}, ruleDelegate.modelData, {
+                                    "action": undefined,
+                                    "enabled": undefined
+                                }))
                                 wrapMode: Text.Wrap
                                 maximumLineCount: 3
                                 elide: Text.ElideRight
@@ -1038,26 +1047,20 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Appearance.colors.colSubtext
-                text: Translation.tr("Your own sing-box JSON, merged over the generated config: objects merge, null deletes a key, outbounds / DNS servers / rule sets with the same tag are replaced, route and DNS rules here go first. Takes effect on Apply.")
-            }
-
-            InfoCard {
-                icon: "description"
-                title: Translation.tr("File")
-                value: Vpn.overlayPath
+                text: Translation.tr("All routing settings and rules, the ones created above included. A rule is { \"action\": \"proxy\" | \"direct\" | \"block\", \"match\": [\"geoip:ru\", \"domain:example.com\", ...] }; without \"match\", its other fields go to sing-box as a route rule as they are (e.g. \"network\": \"udp\", \"port\": [443]). Takes effect on Apply.")
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 260
+                Layout.preferredHeight: 320
                 radius: Appearance.rounding.small
                 color: Appearance.m3colors.m3surface
                 border.width: 1
-                border.color: overlayEditor.activeFocus ? Appearance.m3colors.m3primary : Appearance.m3colors.m3outlineVariant
+                border.color: routingEditor.activeFocus ? Appearance.m3colors.m3primary : Appearance.m3colors.m3outlineVariant
                 clip: true
 
                 ScrollView {
-                    id: overlayScroll
+                    id: routingScroll
                     anchors {
                         fill: parent
                         margins: 8
@@ -1067,20 +1070,21 @@ ApplicationWindow {
                     ScrollBar.horizontal.policy: ScrollBar.AsNeeded
 
                     StyledTextArea {
-                        id: overlayEditor
-                        width: overlayScroll.availableWidth
+                        id: routingEditor
+                        readonly property bool dirty: text !== routingRoot.savedJson
+                        width: routingScroll.availableWidth
                         background: null
                         clip: true
-                        text: Vpn.overlayText
-                        placeholderText: "{\n  \"route\": { \"rules\": [] }\n}"
+                        text: routingRoot.savedJson
                         font.family: Appearance.font.family.monospace
                         wrapMode: TextArea.Wrap
 
+                        // The settings above changed: follow them unless edited here
                         Connections {
-                            target: Vpn
-                            function onOverlayTextChanged() {
-                                if (!overlayEditor.activeFocus)
-                                    overlayEditor.text = Vpn.overlayText;
+                            target: routingRoot
+                            function onSavedJsonChanged() {
+                                if (!routingEditor.activeFocus)
+                                    routingEditor.text = routingRoot.savedJson;
                             }
                         }
                     }
@@ -1088,26 +1092,43 @@ ApplicationWindow {
             }
 
             StyledText {
-                visible: routingRoot.overlayError.length > 0
+                visible: routingRoot.jsonError.length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Appearance.colors.colError
-                text: routingRoot.overlayError
+                text: routingRoot.jsonError
             }
 
             ConfigRow {
                 uniform: true
                 ActionButton {
-                    text: Translation.tr("Reload")
+                    text: Translation.tr("Reset")
+                    enabled: routingEditor.dirty
                     onClicked: {
-                        overlayEditor.text = Vpn.overlayText;
-                        routingRoot.overlayError = "";
+                        routingEditor.text = routingRoot.savedJson;
+                        routingRoot.jsonError = "";
                     }
                 }
                 ActionButton {
                     text: Translation.tr("Save JSON")
-                    enabled: overlayEditor.text !== Vpn.overlayText
-                    onClicked: routingRoot.overlayError = Vpn.saveOverlay(overlayEditor.text)
+                    enabled: routingEditor.dirty
+                    onClicked: {
+                        routingRoot.jsonError = Vpn.saveRoutingJson(routingEditor.text);
+                        if (routingRoot.jsonError === "")
+                            routingEditor.text = routingRoot.savedJson;
+                    }
+                }
+            }
+
+            NoticeBox {
+                visible: Vpn.overlayText.trim().length > 0
+                Layout.fillWidth: true
+                materialIcon: "merge"
+                text: Translation.tr("Also merged over the generated config: your sing-box overlay %1").arg(Vpn.overlayPath)
+
+                StyledButton {
+                    text: Translation.tr("Edit")
+                    onClicked: Vpn.editOverlay()
                 }
             }
         }

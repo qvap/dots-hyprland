@@ -18,6 +18,11 @@
 #                                                         quic, stun, ...)
 #   geosite:<name>[@source]   geoip:<name>[@source]
 #   a bare value = ip: if it parses as an address / CIDR, else domain:.
+# A rule without "match" is a sing-box route rule written by hand: its other
+# fields (port, network, domain_suffix, type: logical, ...) go into the
+# config as they are, the action decides the outbound. E.g.
+#   { "action": "direct", "network": "tcp", "port": [22], "enabled": true }
+# (no DNS rule follows from it; rule-sets it names must exist: overlay).
 # geosite / geoip are binary rule-sets (.srs) from SOURCES, tried in order
 # unless @source pins one; the script downloads them (`rulesets`), compose reads
 # them from the rules dir. LAN (private addresses) always goes direct.
@@ -152,10 +157,18 @@ def rules_of(routing):
             raise Bad("rule %d: action must be %s" % (i + 1, " | ".join(ACTIONS)))
         if r.get("enabled", True) is False:
             continue
+        if "match" not in r:
+            raw = {k: v for k, v in r.items() if k not in ("action", "enabled")}
+            if not raw:
+                raise Bad("rule %d: needs match or sing-box rule fields" % (i + 1))
+            if "outbound" in raw:
+                raise Bad("rule %d: the outbound is set by action" % (i + 1))
+            out.append((r["action"], [], raw))
+            continue
         match = r.get("match") or []
         if isinstance(match, str):
             match = [match]
-        out.append((r["action"], [parse(m) for m in match]))
+        out.append((r["action"], [parse(m) for m in match], None))
     return final, out
 
 
@@ -166,7 +179,7 @@ def ruleset_file(kind, name, source):
 def rulesets(routing):
     """Unique (file, [urls]) the routing needs, in rule order."""
     seen, out = set(), []
-    for _, matchers in rules_of(routing)[1]:
+    for _, matchers, _ in rules_of(routing)[1]:
         for kind, value, source in matchers:
             if kind not in ("geosite", "geoip"):
                 continue
@@ -193,7 +206,10 @@ def compose_routing(cfg, routing, rules_dir):
     rrules.append({"ip_is_private": True, "outbound": "direct"})
     files = set()
     gen_dns = []
-    for i, (action, matchers) in enumerate(rules):
+    for i, (action, matchers, raw) in enumerate(rules):
+        if raw is not None:
+            rrules.append(dict(raw, **target[action]))
+            continue
         fields, dfields, tags, dtags, protocols = {}, {}, [], [], []
         for kind, value, source in matchers:
             if kind == "protocol":

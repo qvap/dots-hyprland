@@ -134,6 +134,9 @@ QtObject {
 
     // Key-order-free JSON, defaults filled in (never applied = defaults)
     function canon(r) {
+        // Config's list<var> is no JS array (Array.isArray says false): a
+        // JSON round trip makes plain arrays of it
+        r = JSON.parse(JSON.stringify(r ?? {}));
         const sort = v => Array.isArray(v) ? v.map(sort) : (v && typeof v === "object") ? Object.keys(v).sort().reduce((o, k) => {
             o[k] = sort(v[k]);
             return o;
@@ -199,19 +202,56 @@ QtObject {
             run("routing", ["apply", JSON.stringify(routingObject())].concat(refresh ? ["refresh"] : []));
     }
 
-    // The overlay: "" removes nothing, it empties the file (= no overlay)
-    function saveOverlay(text) {
-        if (text.trim().length > 0) {
-            try {
-                const parsed = JSON.parse(text);
-                if (typeof parsed !== "object" || Array.isArray(parsed))
-                    return Translation.tr("The config must be a JSON object");
-            } catch (e) {
-                return Translation.tr("Invalid JSON") + ": " + e.message;
-            }
+    // The routing as the JSON the Advanced editor shows (routing.py's form)
+    function routingJson() {
+        return JSON.stringify(JSON.parse(JSON.stringify(routingObject())), null, 2);
+    }
+
+    // The Advanced editor's JSON into Config (Apply puts it in force):
+    // "" = saved, else what is wrong. Rule contents are checked by routing.py
+    // on Apply; here only what Config could not hold.
+    function saveRoutingJson(text) {
+        let r;
+        try {
+            r = JSON.parse(text);
+        } catch (e) {
+            return Translation.tr("Invalid JSON") + ": " + e.message;
         }
-        overlayFile.setText(text);
+        if (!r || typeof r !== "object" || Array.isArray(r))
+            return Translation.tr("The routing must be a JSON object");
+        const known = ["final", "rules", "fakeip", "remoteDns", "hysteria2UpMbps", "hysteria2DownMbps"];
+        const unknown = Object.keys(r).filter(k => !known.includes(k));
+        if (unknown.length > 0)
+            return Translation.tr("Unknown key: %1").arg(unknown[0]);
+        const final = r.final ?? "proxy";
+        if (final !== "proxy" && final !== "direct")
+            return Translation.tr("final: proxy | direct");
+        const rules = r.rules ?? [];
+        if (!Array.isArray(rules))
+            return Translation.tr("rules: must be an array");
+        for (let i = 0; i < rules.length; i++) {
+            const rule = rules[i];
+            if (!rule || typeof rule !== "object" || Array.isArray(rule) || !["proxy", "direct", "block"].includes(rule.action))
+                return Translation.tr("Rule %1: action must be proxy | direct | block").arg(i + 1);
+        }
+        const mbps = v => Number.isInteger(v ?? 0) && (v ?? 0) >= 0;
+        if (!mbps(r.hysteria2UpMbps) || !mbps(r.hysteria2DownMbps))
+            return Translation.tr("hysteria2*Mbps: a whole number >= 0");
+        if (typeof (r.remoteDns ?? "") !== "string" || typeof (r.fakeip ?? false) !== "boolean")
+            return Translation.tr("remoteDns: a string, fakeip: true | false");
+        const c = Config.options.vpn.routing;
+        c.defaultRoute = final;
+        c.rules = rules;
+        c.fakeip = r.fakeip ?? false;
+        c.remoteDns = r.remoteDns ?? "8.8.8.8";
+        c.hysteria2UpMbps = r.hysteria2UpMbps ?? 0;
+        c.hysteria2DownMbps = r.hysteria2DownMbps ?? 0;
         return "";
+    }
+
+    // The overlay in a terminal editor (a skeleton if there is none yet)
+    function editOverlay() {
+        Quickshell.execDetached(["bash", "-c", `${Config.options.apps.terminal} bash "$0" edit`, scriptPath]);
     }
 
     // --- Connection ---
