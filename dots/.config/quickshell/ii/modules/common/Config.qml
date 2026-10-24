@@ -245,6 +245,15 @@ Singleton {
                     property bool enableSidebar: false
                     property real widgetsFactor: 1.2
                 }
+                property JsonObject videoWallpaper: JsonObject { // Read by the wayhaven daemon
+                    property string pauseMode: "tiled" // "never", "fullscreen", "tiled" (also pause behind any tiled window)
+                    property bool audio: false
+                    property real volume: 50
+                    property real speed: 1.0
+                    property bool crossfade: true
+                    property string hwdec: "auto-safe" // mpv --hwdec value
+                    property var mpvOptions: ({}) // Extra mpv options, e.g. {"hwdec-extra-frames": "0"}
+                }
             }
 
             property JsonObject bar: JsonObject {

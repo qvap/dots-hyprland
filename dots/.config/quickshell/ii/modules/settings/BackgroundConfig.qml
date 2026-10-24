@@ -53,6 +53,83 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "movie"
+        title: Translation.tr("Video wallpaper")
+
+        ContentSubsection {
+            title: Translation.tr("Pause playback")
+            ConfigSelectionArray {
+                currentValue: Config.options.background.videoWallpaper.pauseMode
+                onSelected: newValue => {
+                    Config.options.background.videoWallpaper.pauseMode = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Never"),
+                        icon: "play_circle",
+                        value: "never"
+                    },
+                    {
+                        displayName: Translation.tr("Fullscreen"),
+                        icon: "fullscreen",
+                        value: "fullscreen"
+                    },
+                    {
+                        displayName: Translation.tr("Covered by windows"),
+                        icon: "select_window",
+                        value: "tiled"
+                    },
+                ]
+            }
+        }
+
+        ConfigRow {
+            uniform: true
+            ConfigSwitch {
+                buttonIcon: "blur_linear"
+                text: Translation.tr("Crossfade on change")
+                checked: Config.options.background.videoWallpaper.crossfade
+                onCheckedChanged: {
+                    Config.options.background.videoWallpaper.crossfade = checked;
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "volume_up"
+                text: Translation.tr("Play audio")
+                checked: Config.options.background.videoWallpaper.audio
+                onCheckedChanged: {
+                    Config.options.background.videoWallpaper.audio = checked;
+                }
+            }
+        }
+
+        ConfigSpinBox {
+            visible: Config.options.background.videoWallpaper.audio
+            icon: "volume_down"
+            text: Translation.tr("Volume (%)")
+            value: Config.options.background.videoWallpaper.volume
+            from: 0
+            to: 100
+            stepSize: 5
+            onValueChanged: {
+                Config.options.background.videoWallpaper.volume = value;
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "speed"
+            text: Translation.tr("Playback speed (%)")
+            value: Config.options.background.videoWallpaper.speed * 100
+            from: 10
+            to: 400
+            stepSize: 5
+            onValueChanged: {
+                Config.options.background.videoWallpaper.speed = value / 100;
+            }
+        }
+    }
+
+    ContentSection {
         id: settingsClock
         icon: "clock_loader_40"
         title: Translation.tr("Widget: Clock")

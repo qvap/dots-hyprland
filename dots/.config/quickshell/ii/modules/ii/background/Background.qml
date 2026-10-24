@@ -124,6 +124,39 @@ Variants {
             }
         }
 
+        // Video wallpaper bridge: the wayhaven daemon draws the video on the background layer.
+        // We feed it the same parallax fractions the still wallpaper uses; it animates them itself
+        // with the same curve (OutCubic, 600ms), so video and widgets move in sync.
+        function sendVideoParallax() {
+            if (!videoWallpaperSocket.connected)
+                return;
+            videoWallpaperSocket.write(`parallax ${bgRoot.monitor?.name ?? "*"} ${wallpaper.usedFractionX} ${wallpaper.usedFractionY} ${bgRoot.parallaxRation}\n`);
+            videoWallpaperSocket.flush();
+        }
+        onParallaxRationChanged: sendVideoParallax()
+        Connections {
+            target: wallpaper
+            function onUsedFractionXChanged() {
+                bgRoot.sendVideoParallax();
+            }
+            function onUsedFractionYChanged() {
+                bgRoot.sendVideoParallax();
+            }
+        }
+        Socket {
+            id: videoWallpaperSocket
+            path: `${Quickshell.env("XDG_RUNTIME_DIR")}/wayhaven.sock`
+            onConnectionStateChanged: bgRoot.sendVideoParallax()
+        }
+        Timer {
+            // (Re)connect: the daemon may start after the shell, or be restarted
+            interval: 2000
+            repeat: true
+            triggeredOnStart: true
+            running: bgRoot.wallpaperIsVideo && !videoWallpaperSocket.connected
+            onTriggered: videoWallpaperSocket.connected = true
+        }
+
         Item {
             anchors.fill: parent
 
@@ -131,7 +164,9 @@ Variants {
             StyledImage {
                 id: wallpaper
                 visible: opacity > 0 && !blurLoader.active
-                opacity: (status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
+                // For videos the wayhaven daemon draws below us; until it is reachable (not installed,
+                // still starting) show the video's first frame instead of an empty background
+                opacity: (status === Image.Ready && (!bgRoot.wallpaperIsVideo || !videoWallpaperSocket.connected)) ? 1 : 0
                 cache: false
                 smooth: false
 

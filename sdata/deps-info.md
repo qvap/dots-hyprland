@@ -232,3 +232,10 @@ Extra dependencies.
 ## illogical-impulse-microtex-git
 - [source](https://github.com/NanoMichael/MicroTeX)
 - This package will be installed as `/opt/MicroTeX`.
+
+## illogical-impulse-wayhaven
+- [source](https://github.com/qvap/wayhaven)
+- Video wallpaper daemon, installed as `/usr/bin/wayhaven`. Used by `quickshell/ii/scripts/colors/switchwall.sh`
+  and `quickshell/ii/modules/ii/background/Background.qml` (parallax bridge).
+- Not strictly required: when it is missing, the shell offers to install it into `~/.local/bin`
+  via `quickshell/ii/scripts/videos/wayhaven-install.sh` (prebuilt release, or a source build with cargo).
