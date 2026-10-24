@@ -697,6 +697,13 @@ Singleton {
 
             property JsonObject wallpaperSelector: JsonObject {
                 property bool useSystemFileDialog: false
+                property JsonObject wallpaperEngine: JsonObject {
+                    property string steamUser: "" // Must own Wallpaper Engine; password goes to the keyring, see scripts/wallpaperEngine/download.py
+                    property string apiKey: "" // Optional Steam Web API key; without it the Workshop browse page is scraped
+                    property string downloadDir: "" // Empty: ~/Pictures/Wallpapers/Animated
+                    property bool showMature: false
+                    property bool keepWorkshopCache: false
+                }
             }
 
             property JsonObject windows: JsonObject {

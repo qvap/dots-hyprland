@@ -856,6 +856,70 @@ ContentPage {
                 Config.options.wallpaperSelector.useSystemFileDialog = checked;
             }
         }
+
+        ContentSubsection {
+            title: Translation.tr("Wallpaper Engine Workshop")
+            tooltip: Translation.tr("Video wallpapers are downloaded with steamcmd; the account must own Wallpaper Engine")
+
+            RowLayout {
+                Layout.fillWidth: true
+                StyledText {
+                    Layout.fillWidth: true
+                    color: Appearance.colors.colSubtext
+                    text: Config.options.wallpaperSelector.wallpaperEngine.steamUser.length > 0
+                        ? Translation.tr("Steam account: %1").arg(Config.options.wallpaperSelector.wallpaperEngine.steamUser)
+                        : Translation.tr("Not signed in to Steam")
+                }
+                RippleButtonWithIcon {
+                    materialIcon: "login"
+                    mainText: Translation.tr("Sign in to Steam")
+                    onClicked: Quickshell.execDetached(["qs", "-p", Quickshell.shellPath("steamLogin.qml")])
+                }
+            }
+
+            MaterialTextArea {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Steam Web API key (optional, steamcommunity.com/dev/apikey)")
+                text: Config.options.wallpaperSelector.wallpaperEngine.apiKey
+                wrapMode: TextEdit.NoWrap
+                onTextChanged: {
+                    Config.options.wallpaperSelector.wallpaperEngine.apiKey = text.trim();
+                }
+            }
+
+            MaterialTextArea {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Download folder (default: ~/Pictures/Wallpapers/Animated)")
+                text: Config.options.wallpaperSelector.wallpaperEngine.downloadDir
+                wrapMode: TextEdit.NoWrap
+                onTextChanged: {
+                    Config.options.wallpaperSelector.wallpaperEngine.downloadDir = text.trim();
+                }
+            }
+
+            ConfigRow {
+                uniform: true
+                ConfigSwitch {
+                    buttonIcon: "explicit"
+                    text: Translation.tr("Show mature wallpapers")
+                    checked: Config.options.wallpaperSelector.wallpaperEngine.showMature
+                    onCheckedChanged: {
+                        Config.options.wallpaperSelector.wallpaperEngine.showMature = checked;
+                    }
+                }
+                ConfigSwitch {
+                    buttonIcon: "inventory_2"
+                    text: Translation.tr("Keep Steam's copy")
+                    checked: Config.options.wallpaperSelector.wallpaperEngine.keepWorkshopCache
+                    onCheckedChanged: {
+                        Config.options.wallpaperSelector.wallpaperEngine.keepWorkshopCache = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Keep the downloaded item in steamapps/workshop too (uses twice the space)")
+                    }
+                }
+            }
+        }
     }
 
     ContentSection {
