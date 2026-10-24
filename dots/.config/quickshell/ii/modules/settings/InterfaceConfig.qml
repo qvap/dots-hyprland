@@ -139,6 +139,29 @@ ContentPage {
                 Config.options.dock.monochromeIcons = checked;
             }
         }
+        ConfigRow {
+            uniform: true
+            ConfigSwitch {
+                buttonIcon: "zoom_in"
+                text: Translation.tr("Magnify icons on hover")
+                checked: Config.options.dock.magnify
+                onCheckedChanged: {
+                    Config.options.dock.magnify = checked;
+                }
+            }
+            ConfigSpinBox {
+                icon: "loupe"
+                text: Translation.tr("Magnification (%)")
+                enabled: Config.options.dock.magnify
+                value: Math.round(Config.options.dock.magnifyScale * 100)
+                from: 110
+                to: 250
+                stepSize: 10
+                onValueChanged: {
+                    Config.options.dock.magnifyScale = value / 100;
+                }
+            }
+        }
     }
 
     ContentSection {

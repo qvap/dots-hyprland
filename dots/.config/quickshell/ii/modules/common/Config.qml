@@ -396,6 +396,8 @@ Singleton {
                 property real hoverRegionHeight: 2
                 property bool pinnedOnStartup: false
                 property bool hoverToReveal: true // When false, only reveals on empty workspace
+                property bool magnify: true // Icons near the cursor grow, like on macOS
+                property real magnifyScale: 1.6 // Size of the icon under the cursor
                 property list<string> pinnedApps: [ // IDs of pinned entries
                     "org.kde.dolphin", "kitty",]
                 property list<string> ignoredAppRegexes: []

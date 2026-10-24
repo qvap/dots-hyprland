@@ -22,6 +22,14 @@ Item {
     property bool buttonHovered: false
     property bool requestDockShow: previewPopup.show
 
+    property bool magnifying: false
+    property real magnifyX: 0 // Cursor x from the list's center
+    property real magnifyRange: 2.5 // Icons either side of the cursor that grow
+    property real magnifyStrength: magnifying ? 1 : 0
+    Behavior on magnifyStrength {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
+
     Layout.fillHeight: true
     Layout.topMargin: Appearance.sizes.hyprlandGapsOut
     implicitWidth: listView.implicitWidth
@@ -30,6 +38,24 @@ Item {
         if (!button || !root.QsWindow)
             return 0;
         return root.QsWindow.mapFromItem(button, button.width / 2, 0).x;
+    }
+
+    // From where the button would be unmagnified, so growing icons don't shift the effect
+    function magnificationAt(index, buttonWidth) {
+        if (root.magnifyStrength === 0)
+            return 1;
+        const apps = TaskbarApps.apps;
+        let before = 0;
+        let total = listView.spacing * Math.max(0, apps.length - 1);
+        for (let i = 0; i < apps.length; i++) {
+            const w = apps[i].appId === "SEPARATOR" ? 1 : buttonWidth;
+            if (i < index)
+                before += w + listView.spacing;
+            total += w;
+        }
+        const center = before + buttonWidth / 2 - total / 2;
+        const d = Math.min(Math.abs(root.magnifyX - center) / (buttonWidth * root.magnifyRange), 1);
+        return 1 + ((Config.options?.dock.magnifyScale ?? 1) - 1) * root.magnifyStrength * (1 + Math.cos(Math.PI * d)) / 2;
     }
 
     StyledListView {
@@ -43,6 +69,8 @@ Item {
         implicitWidth: contentWidth
 
         Behavior on implicitWidth {
+            // Would lag behind the icons and push the list off center
+            enabled: root.magnifyStrength === 0
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
@@ -50,13 +78,31 @@ Item {
             objectProp: "appId"
             values: TaskbarApps.apps
         }
-        delegate: DockAppButton {
+        delegate: Item {
+            id: appSlot
             required property var modelData
-            appToplevel: modelData
-            appListRoot: root
+            required property int index
+            readonly property real magnification: appButton.isSeparator ? 1 : root.magnificationAt(index, appButton.implicitWidth)
+            implicitWidth: appButton.implicitWidth * magnification
+            implicitHeight: appButton.implicitHeight
 
-            topInset: Appearance.sizes.hyprlandGapsOut + root.buttonPadding
-            bottomInset: Appearance.sizes.hyprlandGapsOut + root.buttonPadding
+            DockAppButton {
+                id: appButton
+                anchors.horizontalCenter: parent.horizontalCenter
+                appToplevel: appSlot.modelData
+                appListRoot: root
+
+                topInset: Appearance.sizes.hyprlandGapsOut + root.buttonPadding
+                bottomInset: Appearance.sizes.hyprlandGapsOut + root.buttonPadding
+
+                // Grows up from the bottom of its background
+                transform: Scale {
+                    origin.x: appButton.width / 2
+                    origin.y: appButton.height - appButton.bottomInset
+                    xScale: appSlot.magnification
+                    yScale: appSlot.magnification
+                }
+            }
         }
     }
 

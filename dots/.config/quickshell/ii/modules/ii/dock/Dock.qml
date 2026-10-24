@@ -28,6 +28,10 @@ Scope { // Scope
             visible: !GlobalStates.screenLocked
 
             property bool reveal: root.pinned || (Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || dockApps.requestDockShow || (!ToplevelManager.activeToplevel?.activated)
+            readonly property real baseHeight: (Config.options?.dock.height ?? 70) + Appearance.sizes.elevationMargin + Appearance.sizes.hyprlandGapsOut
+            // Room above the dock for magnified icons
+            readonly property real magnifyRoom: Config.options?.dock.magnify ? (Config.options?.dock.height ?? 70) * ((Config.options?.dock.magnifyScale ?? 1) - 1) : 0
+            readonly property bool magnifying: magnifyRoom > 0 && reveal && dockMouseArea.containsMouse
 
             anchors {
                 bottom: true
@@ -35,36 +39,61 @@ Scope { // Scope
                 right: true
             }
 
-            exclusiveZone: root.pinned ? implicitHeight - (Appearance.sizes.hyprlandGapsOut) - (Appearance.sizes.elevationMargin - Appearance.sizes.hyprlandGapsOut) : 0
+            exclusiveZone: root.pinned ? baseHeight - (Appearance.sizes.hyprlandGapsOut) - (Appearance.sizes.elevationMargin - Appearance.sizes.hyprlandGapsOut) : 0
 
             implicitWidth: dockBackground.implicitWidth
             WlrLayershell.namespace: "quickshell:dock"
             color: "transparent"
 
-            implicitHeight: (Config.options?.dock.height ?? 70) + Appearance.sizes.elevationMargin + Appearance.sizes.hyprlandGapsOut
+            implicitHeight: baseHeight + magnifyRoom
 
             mask: Region {
                 item: dockMouseArea
             }
 
+            // Cursor x for magnification, in window coordinates so that the dock
+            // resizing under it can't feed back. (dockMouseArea.mouseX stops
+            // updating while a button is hovered.)
+            property real cursorX: 0
+            // On the window's content item: it doesn't move, and handlers of
+            // ancestors still see the cursor over the buttons
+            HoverHandler {
+                id: cursorTracker
+            }
+            // Sampled once a frame rather than bound, so nothing the icons do
+            // within a frame can feed back into it
+            FrameAnimation {
+                running: dockRoot.magnifying
+                onTriggered: dockRoot.cursorX = cursorTracker.point.position.x
+            }
+
             MouseArea {
                 id: dockMouseArea
-                height: parent.height
+                // How far the dock is slid down out of view
+                property real slide: dockRoot.reveal ? 0 : Config.options?.dock.hoverToReveal ? (dockRoot.baseHeight - Config.options.dock.hoverRegionHeight) : (dockRoot.baseHeight + 1)
+                // While magnifying, also covers the room above so the enlarged icons stay hovered
+                readonly property real room: dockRoot.magnifying ? dockRoot.magnifyRoom : 0
+                height: dockRoot.baseHeight + room
                 anchors {
                     top: parent.top
-                    topMargin: dockRoot.reveal ? 0 : Config.options?.dock.hoverToReveal ? (dockRoot.implicitHeight - Config.options.dock.hoverRegionHeight) : (dockRoot.implicitHeight + 1)
+                    topMargin: dockRoot.magnifyRoom - room + slide
                     horizontalCenter: parent.horizontalCenter
                 }
                 implicitWidth: dockHoverRegion.implicitWidth + Appearance.sizes.elevationMargin * 2
                 hoverEnabled: true
 
-                Behavior on anchors.topMargin {
+                Behavior on slide {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
 
                 Item {
                     id: dockHoverRegion
-                    anchors.fill: parent
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    height: dockRoot.baseHeight
                     implicitWidth: dockBackground.implicitWidth
 
                     Item { // Wrapper for the dock background
@@ -124,9 +153,16 @@ Scope { // Scope
                             DockApps {
                                 id: dockApps
                                 buttonPadding: dockRow.padding
+                                magnifying: dockRoot.magnifying
+                                // The list's center doesn't move as icons grow (the dock stays
+                                // centered and the items around the list keep their size)
+                                magnifyX: dockRoot.cursorX - dockRoot.width / 2 - (dockApps.x - (dockRow.spacing * 2 + trailingSeparator.width + overviewButton.width)) / 2
                             }
-                            DockSeparator {}
+                            DockSeparator {
+                                id: trailingSeparator
+                            }
                             DockButton {
+                                id: overviewButton
                                 Layout.fillHeight: true
                                 onClicked: GlobalStates.overviewOpen = !GlobalStates.overviewOpen
                                 topInset: Appearance.sizes.hyprlandGapsOut + dockRow.padding
