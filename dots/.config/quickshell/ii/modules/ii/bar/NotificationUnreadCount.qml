@@ -6,13 +6,30 @@ import qs.modules.common.widgets
 MaterialSymbol {
     id: root
     readonly property bool showUnreadCount: Config.options.bar.indicators.notifications.showUnreadCount
+    readonly property bool showPing: !Notifications.silent && Notifications.unread > 0
+    // Keeps the last count on the badge while it shrinks away
+    property int displayedCount: Notifications.unread
+    Connections {
+        target: Notifications
+        function onUnreadChanged() {
+            if (Notifications.unread > 0) root.displayedCount = Notifications.unread;
+        }
+    }
     text: Notifications.silent ? "notifications_paused" : "notifications"
     iconSize: Appearance.font.pixelSize.larger
     color: Config.options.bar.cornerStyle === 3 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
 
     Rectangle {
         id: notifPing
-        visible: !Notifications.silent && Notifications.unread > 0
+        visible: scale > 0
+        scale: root.showPing ? 1 : 0
+        opacity: root.showPing ? 1 : 0
+        Behavior on scale {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
         anchors {
             right: parent.right
             top: parent.top
@@ -32,7 +49,7 @@ MaterialSymbol {
             anchors.centerIn: parent
             font.pixelSize: Appearance.font.pixelSize.smallest
             color: Config.options.bar.cornerStyle === 3 ? Appearance.colors.colPrimary : Appearance.colors.colLayer0
-            text: Notifications.unread
+            text: root.displayedCount
         }
     }
 }

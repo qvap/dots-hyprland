@@ -168,11 +168,6 @@ Item {
         opacity: morphing ? 1 : root.idleSurfaceOpacity
         visible: root.exposed && opacity > 0
         z: 1
-        focus: root.expanded
-        Keys.onEscapePressed: event => {
-            root.expanded = false;
-            event.accepted = true;
-        }
 
         StyledRectangularShadow {
             parent: surface

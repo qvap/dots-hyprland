@@ -62,13 +62,20 @@ Item {
             iconSize: Appearance.font.pixelSize.larger
             color: root.isMaterial ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
         }
-        Loader {
-            id: notifLoader
-            active: Notifications.silent || Notifications.unread > 0
-            visible: active
-            width: active ? item?.implicitWidth ?? 0 : 0
-            height: active ? item?.implicitHeight ?? 0 : 0
-            source: "NotificationUnreadCount.qml"
+        Revealer {
+            id: notifRevealer
+            reveal: Notifications.silent || Notifications.unread > 0
+            vertical: root.vertical
+            NotificationUnreadCount {
+                opacity: notifRevealer.reveal ? 1 : 0
+                scale: notifRevealer.reveal ? 1 : 0.6
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+                Behavior on scale {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
         }
     }
 }

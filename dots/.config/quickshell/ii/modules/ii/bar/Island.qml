@@ -46,7 +46,7 @@ BarMediaMorph {
         NumberAnimation { duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.standard }
     }
 
-    holdsBar: barHover.hovered || revealWorkspaces
+    holdsBar: barHover.hovered
     boundsSource: surface
     idleSurfaceWidth: vertical ? Math.min(32, width) : compactWidth
     idleSurfaceHeight: vertical ? height : compactHeight

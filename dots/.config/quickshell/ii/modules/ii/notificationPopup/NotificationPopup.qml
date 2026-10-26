@@ -17,7 +17,28 @@ Scope {
         readonly property bool popupAtBottom: popupPosition.startsWith("bottom_")
         readonly property bool popupAtLeft: popupPosition.endsWith("_left")
         readonly property bool popupAtRight: popupPosition.endsWith("_right")
-        visible: (Notifications.popupList.length > 0) && !GlobalStates.screenLocked
+        readonly property bool hasPopups: Notifications.popupList.length > 0
+        // Stays mapped while the last popup animates out
+        property bool lingering: false
+        visible: (hasPopups || lingering) && !GlobalStates.screenLocked
+        onHasPopupsChanged: {
+            lingering = !hasPopups;
+            if (lingering) lingerTimer.restart();
+        }
+        Timer {
+            id: lingerTimer
+            interval: Appearance.animation.elementMove.duration
+            onTriggered: root.lingering = false
+        }
+
+        // Popups added before the surface is on screen would finish their add
+        // transition unseen, so the list fills only once a few frames were drawn.
+        property bool contentReady: false
+        onBackingWindowVisibleChanged: if (!backingWindowVisible) contentReady = false
+        FrameAnimation {
+            running: root.backingWindowVisible && !root.contentReady
+            onTriggered: if (currentFrame >= 2) root.contentReady = true
+        }
         screen: Quickshell.screens.find(s => Config.options.notifications.forceMonitor.enable ? s.name === Config.options.notifications.forceMonitor.name : s.name === Hyprland.focusedMonitor?.name) ?? null
 
         WlrLayershell.namespace: "quickshell:notificationPopup"
@@ -47,6 +68,7 @@ Scope {
             width: implicitWidth
             verticalLayoutDirection: root.popupAtBottom ? ListView.BottomToTop : ListView.TopToBottom
             popup: true
+            showItems: root.contentReady
         }
     }
 }

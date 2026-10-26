@@ -59,7 +59,6 @@ Scope {
                 readonly property BarModule.BarMorphRegistry morphRegistry: BarModule.BarMorphRegistry {}
                 property alias islandOverlay: islandOverlayLayer
                 readonly property bool islandExpanded: morphRegistry.expanded
-                WlrLayershell.keyboardFocus: islandExpanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                 onIslandExpandedChanged: {
                     if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
                     else GlobalFocusGrab.removeDismissable(barRoot);
