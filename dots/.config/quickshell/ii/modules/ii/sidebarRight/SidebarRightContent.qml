@@ -2,6 +2,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
@@ -168,7 +169,7 @@ Item {
                                     Image {
                                         id: avatarImage
                                         anchors.fill: parent
-                                        source: Config.options.profile.avatarPath !== "" ? "file://" + Config.options.profile.avatarPicture : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
+                                        source: "file://" + (Config.options.profile.avatarPicture || `${FileUtils.trimFileProtocol(Directories.home)}/.face`)
                                         sourceSize.width: avatarImage.width * 2
                                         sourceSize.height: avatarImage.height * 2
                                         fillMode: Image.PreserveAspectCrop

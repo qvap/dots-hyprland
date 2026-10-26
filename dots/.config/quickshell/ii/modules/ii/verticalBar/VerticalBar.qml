@@ -10,6 +10,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.bar as BarModule
 
 Scope {
     id: bar
@@ -48,25 +49,23 @@ Scope {
                     }
                 }
                 property bool superShow: false
-                readonly property bool islandInteracting: (islandItem?.interacting ?? false) || (mediaItem?.interacting ?? false)
+                readonly property bool islandInteracting: morphRegistry.interacting
                 readonly property bool hasIsland: [Config.options.bar.layouts.leftLayout,
                     Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
                     .some(layout => layout.includes("island"))
                 readonly property bool hasMorphingMedia: [Config.options.bar.layouts.leftLayout,
                     Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
                     .some(layout => layout.includes("media"))
-                property var islandItem: null
-                property var mediaItem: null
+                readonly property BarModule.BarMorphRegistry morphRegistry: BarModule.BarMorphRegistry {}
                 property alias islandOverlay: islandOverlayLayer
-                readonly property bool islandExpanded: (islandItem?.expanded ?? false) || (mediaItem?.expanded ?? false)
+                readonly property bool islandExpanded: morphRegistry.expanded
                 WlrLayershell.keyboardFocus: islandExpanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                 onIslandExpandedChanged: {
                     if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
                     else GlobalFocusGrab.removeDismissable(barRoot);
                 }
                 function close() {
-                    if (islandItem) islandItem.expanded = false;
-                    if (mediaItem) mediaItem.expanded = false;
+                    morphRegistry.collapseAll(null);
                 }
                 // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
                 Item { id: islandOverlayLayer; anchors.fill: parent; z: 100 }
@@ -89,21 +88,12 @@ Scope {
                     item: hoverMaskRegion
                     Region {
                         intersection: Intersection.Combine
-                        item: barRoot.islandItem?.pullSurface ?? null
+                        item: barRoot.morphRegistry.active?.pullSurface ?? null
                     }
                     Region {
                         intersection: Intersection.Combine
-                        item: barRoot.islandItem?.expandedSurface ?? null
-                        radius: barRoot.islandItem?.expandedSurface?.radius ?? 0
-                    }
-                    Region {
-                        intersection: Intersection.Combine
-                        item: barRoot.mediaItem?.pullSurface ?? null
-                    }
-                    Region {
-                        intersection: Intersection.Combine
-                        item: barRoot.mediaItem?.expandedSurface ?? null
-                        radius: barRoot.mediaItem?.expandedSurface?.radius ?? 0
+                        item: barRoot.morphRegistry.active?.expandedSurface ?? null
+                        radius: barRoot.morphRegistry.active?.expandedSurface?.radius ?? 0
                     }
                 }
                 color: "transparent"

@@ -66,6 +66,12 @@ Item {
         return true;
     }
 
+    // A pill holding only the media widget would show behind its morph
+    function morphHidesPill(layout, repeater) {
+        return layout.length === 1 && layout[0] === "media"
+            && (repeater.itemAt(0)?.morphingMedia?.expansion ?? 0) > 0;
+    }
+
     function getMaterialPillColor(name, widget = null) {
         if (Config.options.bar.cornerStyle !== 3) return Appearance.colors.colPrimaryContainer;
         switch(name) {
@@ -201,8 +207,7 @@ Item {
             Rectangle {
                 id: leftMaterialPill
                 visible: root.isMaterial
-                opacity: root.effectiveLeftLayout.length === 1 && root.effectiveLeftLayout[0] === "media"
-                    && leftMaterialGroupRepeater.itemAt(0)?.morphingMedia?.expansion > 0 ? 0 : 1
+                opacity: root.morphHidesPill(root.effectiveLeftLayout, leftMaterialGroupRepeater) ? 0 : 1
                 anchors.centerIn: parent
                 implicitWidth: leftMaterialRow.implicitWidth + 10
                 implicitHeight: leftMaterialRow.implicitHeight
@@ -311,8 +316,7 @@ Item {
             Rectangle {
                 id: centerMaterialPill
                 visible: root.isMaterial
-                opacity: root.effectiveMiddleLayout.length === 1 && root.effectiveMiddleLayout[0] === "media"
-                    && centerMaterialWorkspaceGroupRepeater.itemAt(0)?.morphingMedia?.expansion > 0 ? 0 : 1
+                opacity: root.morphHidesPill(root.effectiveMiddleLayout, centerMaterialWorkspaceGroupRepeater) ? 0 : 1
                 anchors.centerIn: parent
                 implicitWidth: centerMaterialRow.implicitWidth + 10
                 implicitHeight: centerMaterialRow.implicitHeight 
@@ -423,8 +427,7 @@ Item {
             Rectangle {
                 id: rightMaterialPill
                 visible: root.isMaterial
-                opacity: root.effectiveRightLayout.length === 1 && root.effectiveRightLayout[0] === "media"
-                    && rightMaterialGroupRepeater.itemAt(0)?.morphingMedia?.expansion > 0 ? 0 : 1
+                opacity: root.morphHidesPill(root.effectiveRightLayout, rightMaterialGroupRepeater) ? 0 : 1
                 anchors.centerIn: parent
                 implicitWidth: rightMaterialRow.implicitWidth + 10
                 implicitHeight: rightMaterialRow.implicitHeight 

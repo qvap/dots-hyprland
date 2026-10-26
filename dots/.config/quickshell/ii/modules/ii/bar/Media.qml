@@ -8,33 +8,20 @@ import qs
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import Quickshell.Services.Mpris
 import Quickshell.Widgets
-import "BarMediaUtils.js" as MediaUtils
 
-Item {
+BarMediaMorph {
     id: root
 
-    property bool vertical: false
     readonly property bool isMaterial: Config.options.bar.cornerStyle === 3
-    readonly property MprisPlayer activePlayer: MediaUtils.selectPlayer(
-        MprisController.players, MprisController.activePlayer, Config.options.bar.media.preferredPlayer)
 
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
 
-    readonly property string artUrl: activePlayer?.trackArtUrl ?? ""
     readonly property string trackTitle: activePlayer?.trackTitle ?? ""
     readonly property string trackArtist: activePlayer?.trackArtist ?? ""
     readonly property bool isPlaying: activePlayer?.isPlaying ?? false
     readonly property bool hasTrack: trackTitle.length > 0
-    readonly property bool hasActivity: activePlayer !== null && activePlayer.playbackState !== MprisPlaybackState.Stopped
-    property bool expanded: false
-    property bool collapsing: false
-    property bool dragging: false
-    property real pullDistance: 0
-    readonly property real pullThreshold: 70
-    readonly property var barWindow: root.QsWindow.window
     property var barGroup: null
     function registerWithGroup() {
         if (barGroup?.morphingMedia === root) barGroup.morphingMedia = null;
@@ -50,154 +37,22 @@ Item {
         }
     }
     readonly property Item groupBackground: barGroup?.visualBackground ?? null
-    readonly property bool exposed: visible && (barWindow?.visible ?? false)
-    readonly property bool interacting: exposed && (expanded || dragging || expansion > 0)
-    readonly property real playerWidth: Math.min(Appearance.sizes.mediaControlsWidth - 2 * Appearance.sizes.elevationMargin,
-        (barWindow?.screen?.width ?? 440) - 16)
-    readonly property real playerHeight: Math.min(Appearance.sizes.mediaControlsHeight - 2 * Appearance.sizes.elevationMargin,
-        (barWindow?.screen?.height ?? 160) - 16)
-    property rect compactBounds: Qt.rect(0, 0, 240, 32)
-    property rect expandedBounds: Qt.rect(0, 0, 440, 160)
-    property real expansion: 0
-    onExpansionChanged: if (collapsing && expansion === 0) collapsing = false
-    Behavior on expansion {
-        enabled: !root.dragging
-        NumberAnimation { duration: 420; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.standard }
-    }
-    function interpolate(from, to) { return from + (to - from) * expansion; }
-    function captureBounds() {
-        if (!barWindow) return;
-        const source = groupBackground ?? root;
-        const pos = source.mapToItem(barWindow.contentItem, 0, 0);
-        compactBounds = Qt.rect(pos.x, pos.y, source.width, source.height);
-        expandedBounds = MediaUtils.expandedBounds(compactBounds, playerWidth, playerHeight,
-            barWindow.width, barWindow.height, vertical, Config.options.bar.bottom,
-            Appearance.sizes.verticalBarWidth, Appearance.sizes.barHeight);
-    }
-    function cancelPull() { pullGesture.cancelPull(); }
-    onExpandedChanged: {
-        if (expanded) {
-            collapsing = false;
-            if (barWindow?.islandItem) barWindow.islandItem.expanded = false;
-            GlobalStates.mediaControlsOpen = false;
-            if (expansion === 0) captureBounds();
-            if (playerLoader.status === Loader.Ready) expansion = 1;
-        } else {
-            collapsing = expansion > 0;
-            expansion = 0;
-        }
-    }
-    onHasActivityChanged: if (!hasActivity) { expanded = false; cancelPull(); }
-    function registerWithBar() {
-        if (!barWindow || typeof barWindow.mediaItem === "undefined") return;
-        if (exposed) barWindow.mediaItem = root;
-        else if (barWindow.mediaItem === root) barWindow.mediaItem = null;
-    }
-    Component.onCompleted: { registerWithBar(); registerWithGroup(); }
-    Component.onDestruction: {
-        if (barWindow?.mediaItem === root) barWindow.mediaItem = null;
-        if (barGroup?.morphingMedia === root) barGroup.morphingMedia = null;
-    }
-    onBarWindowChanged: registerWithBar()
+    Component.onCompleted: registerWithGroup()
+    Component.onDestruction: if (barGroup?.morphingMedia === root) barGroup.morphingMedia = null
     onParentChanged: registerWithGroup()
-    onExposedChanged: {
-        if (!exposed) { expanded = false; if (dragging) cancelPull(); }
-        registerWithBar();
-    }
-    readonly property Item pullSurface: dragging || (expanded && pullDistance >= pullThreshold && expansion < 1)
-        ? pullCorridor : null
-    Item {
-        id: pullCorridor
-        parent: root.barWindow?.islandOverlay ?? root
-        x: root.compactBounds.x - (root.vertical && Config.options.bar.bottom ? root.pullThreshold : 0)
-        y: root.compactBounds.y - (!root.vertical && Config.options.bar.bottom ? root.pullThreshold : 0)
-        width: root.compactBounds.width + (root.vertical ? root.pullThreshold : 0)
-        height: root.compactBounds.height + (!root.vertical ? root.pullThreshold : 0)
-    }
-    readonly property Item expandedSurface: exposed && expansion > 0 ? surface : null
-    Item {
-        id: overlay
-        parent: root.barWindow?.islandOverlay ?? root
-        anchors.fill: parent
-        visible: root.exposed
-    }
-    BarMediaSurface {
-        id: surface
-        textureSize: Qt.size(Math.ceil(Math.max(root.compactBounds.width, root.expandedBounds.width)),
-            Math.ceil(Math.max(root.compactBounds.height, root.expandedBounds.height)))
-        parent: overlay
-        x: root.interpolate(root.compactBounds.x, root.expandedBounds.x)
-        y: root.interpolate(root.compactBounds.y, root.expandedBounds.y)
-        width: root.interpolate(root.compactBounds.width, root.expandedBounds.width)
-        height: root.interpolate(root.compactBounds.height, root.expandedBounds.height)
-        radius: root.interpolate(Math.min(root.compactBounds.width, root.compactBounds.height) / 2, 24)
-        color: {
-            const base = root.groupBackground?.color ?? (root.isMaterial ? root.materialPillColor : Appearance.colors.colLayer0);
-            return ColorUtils.applyAlpha(base, base.a + (1 - base.a) * Math.min(1, root.expansion * 3));
-        }
-        visible: root.exposed && root.expansion > 0
-        focus: root.expanded
-        Keys.onEscapePressed: event => { root.expanded = false; event.accepted = true; }
-        StyledRectangularShadow {
-            parent: surface
-            target: surface
-            opacity: root.expansion
-            visible: opacity > 0
-            cached: false
-            z: -1
-        }
-        BarMediaPlayerLoader {
-            id: playerLoader
-            host: root
-        }
+
+    boundsSource: groupBackground ?? root
+    surfaceColor: {
+        const base = groupBackground?.color ?? (isMaterial ? materialPillColor : Appearance.colors.colLayer0);
+        return ColorUtils.applyAlpha(base, base.a + (1 - base.a) * Math.min(1, expansion * 3));
     }
 
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    property string displayedArtFilePath: {
-        if (!root.artDownloaded)
-            return "";
-        if (root.artUrl.startsWith("file://"))
-            return root.artUrl;
-        return Qt.resolvedUrl(artFilePath);
-    }
-
-    readonly property color artDominantColor: ColorUtils.mix(colorQuantizer.colors[0] ?? Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.8)
-    readonly property QtObject blendedColors: root.isMaterial && root.hasTrack && root.displayedArtFilePath !== "" && colorQuantizer.colors.length > 0 ? adaptedColors : Appearance.colors
+    // The player card downloads the art and extracts its colors
+    readonly property string displayedArtFilePath: playerCard?.displayedArtFilePath ?? ""
+    readonly property QtObject blendedColors: isMaterial && hasTrack && displayedArtFilePath !== "" && playerCard.hasArtColors
+        ? playerCard.blendedColors : Appearance.colors
 
     readonly property color materialPillColor: root.hasTrack ? root.blendedColors.colLayer0 : Appearance.colors.colSecondaryContainer
-
-    ColorQuantizer {
-        id: colorQuantizer
-        source: root.isMaterial && root.hasTrack ? root.displayedArtFilePath : ""
-        depth: 0
-        rescaleSize: 1
-    }
-
-    AdaptedMaterialScheme {
-        id: adaptedColors
-        color: root.artDominantColor
-    }
-
-    onArtFilePathChanged: refreshArtwork()
-    onIsMaterialChanged: refreshArtwork()
-
-    function refreshArtwork() {
-        artDownloaded = false;
-        if (!isMaterial || !artUrl) return;
-        if (artUrl.startsWith("file://")) {
-            artDownloaded = true;
-            return;
-        }
-        // Let the current request finish before starting the latest one.
-        if (artDownloader.running) return;
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.running = true;
-    }
 
     function updateWidgetPosition() {
         if (root.width <= 0)
@@ -219,23 +74,6 @@ Item {
             if (GlobalStates.mediaControlsOpen) {
                 root.updateWidgetPosition();
             }
-        }
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c",
-            '[ -f "$2" ] || { part="$2.$$.part"; trap \'rm -f -- "$part"\' EXIT; '
-                + 'curl -f -sSL -o "$part" -- "$1" && mv -- "$part" "$2"; }',
-            "bar-media-art", targetFile, artFilePath]
-        onExited: exitCode => {
-            if (targetFile !== root.artUrl || artFilePath !== root.artFilePath) {
-                root.refreshArtwork();
-                return;
-            }
-            root.artDownloaded = exitCode === 0;
         }
     }
 
@@ -295,14 +133,9 @@ Item {
             event.accepted = true;
         }
     }
-    BarMediaPullHandler {
-        id: pullGesture
-        host: root
-    }
-
     Item {
         id: compactContent
-        parent: root.expansion > 0 ? surface : root
+        parent: root.expansion > 0 ? root.surface.contentItem : root
         anchors.centerIn: parent
         width: root.expansion > 0 ? root.compactBounds.width : root.width
         height: root.expansion > 0 ? root.compactBounds.height : root.height
@@ -396,7 +229,7 @@ Item {
                             Image {
                                 id: avatarImage
                                 anchors.fill: parent
-                                source: Config.options.profile.avatarPath !== "" ? "file://" + Config.options.profile.avatarPicture : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
+                                source: "file://" + (Config.options.profile.avatarPicture || `${FileUtils.trimFileProtocol(Directories.home)}/.face`)
                                 sourceSize.width: avatarRect.width * 2
                                 sourceSize.height: avatarRect.height * 2
                                 fillMode: Image.PreserveAspectCrop

@@ -107,6 +107,16 @@ ContentPage {
             onCheckedChanged: Config.options.bar.media.onlyTitle = checked
         }
 
+        ConfigSwitch {
+            buttonIcon: "pill"
+            text: Translation.tr("Island follows the color scheme")
+            checked: Config.options.bar.island.followTheme
+            onCheckedChanged: Config.options.bar.island.followTheme = checked
+            StyledToolTip {
+                text: Translation.tr("Use the theme colors instead of the black Dynamic Island look")
+            }
+        }
+
         ContentSubsection {
             title: Translation.tr("Preferred player")
 

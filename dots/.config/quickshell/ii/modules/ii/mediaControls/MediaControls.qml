@@ -30,7 +30,6 @@ Scope {
     readonly property real widgetWidth: Appearance.sizes.mediaControlsWidth
     readonly property real widgetHeight: Appearance.sizes.mediaControlsHeight
     property real popupRounding: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
-    property list<real> visualizerPoints: []
 
     function filterDuplicatePlayers(players) {
         let filtered = [];
@@ -59,23 +58,6 @@ Scope {
             group.forEach(idx => used.add(idx));
         }
         return filtered;
-    }
-
-    Process {
-        id: cavaProc
-        running: root.realPlayers.length > 0
-        onRunningChanged: {
-            if (!cavaProc.running) {
-                root.visualizerPoints = [];
-            }
-        }
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
-        stdout: SplitParser {
-            onRead: data => {
-                let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                root.visualizerPoints = points;
-            }
-        }
     }
 
     // lazy fix for broken exit animation
@@ -124,48 +106,38 @@ Scope {
                 right: Config.options.bar.vertical && Config.options.bar.bottom
             }
 
+            // The last position next to the bar widget, kept while the widget is unknown.
+            // Written from change handlers: writing it inside the bindings below loops.
             property real lastCalculatedLeft: (panelWindow.screen.width / 2) - (widgetWidth / 2)
             property real lastCalculatedTop: (panelWindow.screen.height / 2) - (widgetHeight * 1.5)
 
-            readonly property real calculatedLeftMargin: {
-                if (Config.options.bar.vertical) {
-                    return Appearance.sizes.barHeight;
-                }
-
+            readonly property real widgetAlignedLeft: {
                 const wx = GlobalStates.mediaWidgetX;
                 const ww = GlobalStates.mediaWidgetWidth;
-
-                if (GlobalStates.mediaControlsOpen && !isNaN(wx) && wx > 0 && !isNaN(ww) && ww > 0) {
-                    let widgetCenter = wx + (ww / 2);
-                    let targetLeft = widgetCenter - (root.widgetWidth / 2);
-
-                    let minLeft = Appearance.sizes.hyprlandGapsOut;
-                    let maxLeft = panelWindow.screen.width - root.widgetWidth - Appearance.sizes.hyprlandGapsOut;
-                    lastCalculatedLeft = Math.max(minLeft, Math.min(maxLeft, targetLeft));
-                }
-
-                return lastCalculatedLeft;
+                if (!GlobalStates.mediaControlsOpen || isNaN(wx) || wx <= 0 || isNaN(ww) || ww <= 0)
+                    return NaN;
+                const targetLeft = wx + ww / 2 - root.widgetWidth / 2;
+                const minLeft = Appearance.sizes.hyprlandGapsOut;
+                const maxLeft = panelWindow.screen.width - root.widgetWidth - Appearance.sizes.hyprlandGapsOut;
+                return Math.max(minLeft, Math.min(maxLeft, targetLeft));
             }
-
-            readonly property real calculatedTopMargin: {
-                if (!Config.options.bar.vertical) {
-                    return Appearance.sizes.barHeight;
-                }
-
+            readonly property real widgetAlignedTop: {
                 const wy = GlobalStates.mediaWidgetY;
                 const wh = GlobalStates.mediaWidgetHeight;
-
-                if (GlobalStates.mediaControlsOpen && !isNaN(wy) && wy > 0 && !isNaN(wh) && wh > 0) {
-                    let widgetCenter = wy + (wh / 2);
-                    let targetTop = widgetCenter - (playerColumnLayout.implicitHeight / 2);
-
-                    let minTop = Appearance.sizes.hyprlandGapsOut;
-                    let maxTop = panelWindow.screen.height - playerColumnLayout.implicitHeight - Appearance.sizes.hyprlandGapsOut;
-                    lastCalculatedTop = Math.max(minTop, Math.min(maxTop, targetTop));
-                }
-
-                return lastCalculatedTop;
+                if (!GlobalStates.mediaControlsOpen || isNaN(wy) || wy <= 0 || isNaN(wh) || wh <= 0)
+                    return NaN;
+                const targetTop = wy + wh / 2 - playerColumnLayout.implicitHeight / 2;
+                const minTop = Appearance.sizes.hyprlandGapsOut;
+                const maxTop = panelWindow.screen.height - playerColumnLayout.implicitHeight - Appearance.sizes.hyprlandGapsOut;
+                return Math.max(minTop, Math.min(maxTop, targetTop));
             }
+            onWidgetAlignedLeftChanged: if (!isNaN(widgetAlignedLeft)) lastCalculatedLeft = widgetAlignedLeft
+            onWidgetAlignedTopChanged: if (!isNaN(widgetAlignedTop)) lastCalculatedTop = widgetAlignedTop
+
+            readonly property real calculatedLeftMargin: Config.options.bar.vertical ? Appearance.sizes.barHeight
+                : isNaN(widgetAlignedLeft) ? lastCalculatedLeft : widgetAlignedLeft
+            readonly property real calculatedTopMargin: !Config.options.bar.vertical ? Appearance.sizes.barHeight
+                : isNaN(widgetAlignedTop) ? lastCalculatedTop : widgetAlignedTop
 
             margins {
                 top: panelWindow.calculatedTopMargin
@@ -217,7 +189,7 @@ Scope {
                     delegate: PlayerControl {
                         required property MprisPlayer modelData
                         player: modelData
-                        visualizerPoints: root.visualizerPoints
+                        visualizerPoints: GlobalStates.visualizerPoints
                         implicitWidth: root.widgetWidth
                         implicitHeight: root.widgetHeight
                         radius: root.popupRounding

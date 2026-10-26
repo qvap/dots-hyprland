@@ -12,6 +12,7 @@ import qs.modules.common.widgets
 Item {
     id: root
     required property MprisPlayer player
+    property string artSource: ""
     property bool mediaVisible: false
     property bool trackVisible: false
     property bool specialVisible: false
@@ -43,20 +44,35 @@ Item {
     readonly property string title: StringUtils.cleanMusicTitle(player?.trackTitle) || player?.identity || Translation.tr("No media")
     readonly property string artist: player?.trackArtist ?? ""
     property color visualizerColor: Appearance.colors.colPrimary
+    property color surfaceColor: "black"
+    property color textColor: "white"
+    property color subtextColor: "#a1a1a1"
+    property color artPlaceholderColor: "#202020"
+
+    // Art at the start and the waveform at the end, each `edgeInset` from the edge
+    readonly property real edgeInset: 10
+    readonly property real artSize: 22
+    readonly property real waveformLength: 18
+    readonly property real waveformExtent: vertical ? 22 : waveformLength
+    readonly property real gap: vertical ? 12 : 8
+    // Where the middle slot starts and how much of the length the chrome takes
+    readonly property real middleStart: mediaVisible ? edgeInset + artSize + gap : 16
+    readonly property real chromeLength: mediaVisible ? middleStart + gap + waveformExtent + edgeInset : 32
+    readonly property real maxSample: 1000
 
     ClippingRectangle {
         visible: root.mediaVisible
-        x: root.vertical ? (parent.width - width) / 2 : 10
-        y: root.vertical ? 10 : (parent.height - height) / 2
-        width: 22
-        height: 22
+        x: root.vertical ? (parent.width - width) / 2 : root.edgeInset
+        y: root.vertical ? root.edgeInset : (parent.height - height) / 2
+        width: root.artSize
+        height: root.artSize
         radius: 6
-        color: "#202020"
+        color: root.artPlaceholderColor
         Image {
             id: art
             anchors.fill: parent
-            source: root.player?.trackArtUrl ?? ""
-            sourceSize: Qt.size(44, 44)
+            source: root.artSource
+            sourceSize: Qt.size(root.artSize * 2, root.artSize * 2)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
         }
@@ -65,16 +81,16 @@ Item {
             visible: art.status !== Image.Ready
             text: "music_note"
             iconSize: 17
-            color: "white"
+            color: root.textColor
         }
     }
 
     Item {
         id: middle
-        x: root.vertical ? 0 : (root.mediaVisible ? 40 : 16)
-        y: root.vertical ? (root.mediaVisible ? 44 : 16) : 0
-        width: root.vertical ? root.width : Math.max(0, root.width - (root.mediaVisible ? 76 : 32))
-        height: root.vertical ? Math.max(0, root.height - (root.mediaVisible ? 88 : 32)) : root.height
+        x: root.vertical ? 0 : root.middleStart
+        y: root.vertical ? root.middleStart : 0
+        width: root.vertical ? root.width : Math.max(0, root.width - root.chromeLength)
+        height: root.vertical ? Math.max(0, root.height - root.chromeLength) : root.height
 
         Item {
             id: orientedMiddle
@@ -101,10 +117,10 @@ Item {
                     y: 1
                     height: labels.subtitleVisible ? 18 : 22
                     text: root.title
-                    color: "white"
+                    color: root.textColor
                     font.pixelSize: Appearance.font.pixelSize.smallie
                     font.family: Appearance.font.family.main
-                    backgroundColor: "black"
+                    backgroundColor: root.surfaceColor
                     centered: false
                     scrollOnlyOnOverflow: true
                 }
@@ -115,7 +131,7 @@ Item {
                     y: 14
                     height: 14
                     text: root.artist
-                    color: "#a1a1a1"
+                    color: root.subtextColor
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     elide: Text.ElideRight
                 }
@@ -127,7 +143,7 @@ Item {
                 opacity: root.specialMix * (1 - root.workspaceMix)
                 text: root.displayedSpecialName
                 color: root.mediaVisible ? root.visualizerColor : Appearance.colors.colPrimary
-                backgroundColor: "black"
+                backgroundColor: root.surfaceColor
                 font.family: Appearance.font.family.main
                 font.pixelSize: Appearance.font.pixelSize.small
             }
@@ -139,23 +155,25 @@ Item {
         visible: root.mediaVisible
         anchors {
             right: root.vertical ? undefined : parent.right
-            rightMargin: root.vertical ? 0 : 10
+            rightMargin: root.vertical ? 0 : root.edgeInset
             horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
             verticalCenter: root.vertical ? undefined : parent.verticalCenter
             bottom: root.vertical ? parent.bottom : undefined
-            bottomMargin: root.vertical ? 10 : 0
+            bottomMargin: root.vertical ? root.edgeInset : 0
         }
-        width: 18
-        height: root.vertical ? 22 : 18
+        width: root.waveformLength
+        height: root.waveformExtent
         Repeater {
             model: 4
             Rectangle {
                 required property int index
                 readonly property real sample: root.visualizerPoints[Math.floor(index * root.visualizerPoints.length / 4)] ?? 0
+                readonly property real level: root.isPlaying
+                    ? Math.max(3, Math.min(root.waveformLength, sample / root.maxSample * root.waveformLength)) : 3
                 x: root.vertical ? (parent.width - width) / 2 : index * 5
                 y: root.vertical ? index * 5 + 2 : (parent.height - height) / 2
-                width: root.vertical ? (root.isPlaying ? Math.max(3, Math.min(18, sample / 1000 * 18)) : 3) : 3
-                height: root.vertical ? 3 : (root.isPlaying ? Math.max(3, Math.min(18, sample / 1000 * 18)) : 3)
+                width: root.vertical ? level : 3
+                height: root.vertical ? 3 : level
                 radius: 1.5
                 color: root.visualizerColor
                 opacity: root.isPlaying ? 1 : 0.55

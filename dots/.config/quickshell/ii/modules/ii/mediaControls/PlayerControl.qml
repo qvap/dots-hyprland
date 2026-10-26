@@ -33,7 +33,8 @@ Item { // Player instance
     property bool clipBackground: true
     property bool showShadow: true
 
-    property string displayedArtFilePath: root.downloaded && root.artUrl.length > 0 ? Qt.resolvedUrl(artFilePath) : ""
+    readonly property string displayedArtFilePath: !root.downloaded || root.artUrl.length === 0 ? ""
+        : root.artUrl.startsWith("file://") ? root.artUrl : Qt.resolvedUrl(artFilePath)
 
     component TrackChangeButton: RippleButton {
         implicitWidth: 24
@@ -66,24 +67,39 @@ Item { // Player instance
         }
     }
 
-    onArtFilePathChanged: {
+    onArtFilePathChanged: refreshArtwork()
+    Component.onCompleted: refreshArtwork()
+
+    function refreshArtwork() {
         root.downloaded = false;
         if (root.artUrl.length === 0) return;
-
-        // Binding does not work in Process
+        if (root.artUrl.startsWith("file://")) {
+            root.downloaded = true;
+            return;
+        }
+        // Let the current request finish; its exit handler starts the latest one.
+        if (coverArtDownloader.running) return;
         coverArtDownloader.targetFile = root.artUrl;
         coverArtDownloader.artFilePath = root.artFilePath;
-        // Download
         coverArtDownloader.running = true;
     }
 
     Process { // Cover art downloader
         id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}'`]
-        onExited: (exitCode, exitStatus) => {
-            root.downloaded = true;
+        property string targetFile
+        property string artFilePath
+        // Arguments instead of interpolation, so URLs with quotes are safe; the
+        // partial file is renamed only when complete, so a cut-off download is never shown.
+        command: ["bash", "-c",
+            '[ -f "$2" ] || { part="$2.$$.part"; trap \'rm -f -- "$part"\' EXIT; '
+                + 'curl -4 -f -sSL -o "$part" -- "$1" && mv -- "$part" "$2"; }',
+            "player-art", targetFile, artFilePath]
+        onExited: exitCode => {
+            if (targetFile !== root.artUrl || artFilePath !== root.artFilePath) {
+                root.refreshArtwork();
+                return;
+            }
+            root.downloaded = exitCode === 0;
         }
     }
 

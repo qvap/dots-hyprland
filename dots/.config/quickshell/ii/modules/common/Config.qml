@@ -346,6 +346,9 @@ Singleton {
                     property int maxWidth: 280
                     property int minWidth: 100
                 }
+                property JsonObject island: JsonObject {
+                    property bool followTheme: false // Color the island with the color scheme instead of black
+                }
             }
 
             property JsonObject battery: JsonObject {
