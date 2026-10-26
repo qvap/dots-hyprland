@@ -106,7 +106,7 @@ ApplicationWindow {
                     loginProc.finished = true;
                     Config.options.wallpaperSelector.wallpaperEngine.steamUser = loginProc.user;
                     // Let the shell retry the download that needed this login
-                    Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperEngine", "loginFinished"]);
+                    Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperEngine", "loginFinished", loginProc.user]);
                     root.stage = "done";
                 } else if (event === "ERROR") {
                     loginProc.finished = true;

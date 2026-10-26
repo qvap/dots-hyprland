@@ -21,7 +21,8 @@ Singleton {
     readonly property var options: Config.options.wallpaperSelector.wallpaperEngine
     readonly property string downloadScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/wallpaperEngine/download.py`
     readonly property string loginQmlPath: FileUtils.trimFileProtocol(Quickshell.shellPath("steamLogin.qml"))
-    readonly property string downloadDir: root.options.downloadDir.length > 0 ? FileUtils.trimFileProtocol(root.options.downloadDir) : FileUtils.trimFileProtocol(`${Directories.pictures}/Wallpapers/Animated`)
+    readonly property string loginLockPath: `${FileUtils.trimFileProtocol(Directories.cache)}/steamLogin.lock`
+    readonly property string downloadDir: root.expandPath(root.options.downloadDir) || FileUtils.trimFileProtocol(`${Directories.pictures}/Wallpapers/Animated`)
     readonly property bool usingApi: root.options.apiKey.length > 0
     property string userAgent: Config.options?.networking?.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 
@@ -45,7 +46,7 @@ Singleton {
     property string applyAfterDownload: "" // Only the last clicked item gets applied
     property string lastError: ""
     property bool loginRequired: false
-    property string retryAfterLogin: "" // Item whose download failed for lack of a Steam session
+    property list<string> pendingLogin: [] // Items waiting for a Steam sign-in
 
     readonly property var sortModes: ({
         "trend": { api: 3, browse: "trend" },
@@ -55,14 +56,26 @@ Singleton {
 
     function load() {} // For forcing initialization
 
+    // "~/x" and relative paths are taken from the home folder; nothing here runs through a shell
+    function expandPath(path) {
+        const trimmed = FileUtils.trimFileProtocol(path.trim());
+        if (trimmed.length === 0) return "";
+        const home = FileUtils.trimFileProtocol(Directories.home).replace(/\/+$/, "");
+        if (trimmed === "~") return home;
+        if (trimmed.startsWith("~/")) return home + trimmed.slice(1);
+        if (!trimmed.startsWith("/")) return `${home}/${trimmed}`;
+        return trimmed;
+    }
+
     function ensureLoaded() {
+        root.refreshDownloaded(); // Files may have been deleted since the tab was last open
         if (root.loaded) return;
         root.loaded = true;
-        root.refreshDownloaded();
         root.refresh();
     }
 
     function refresh() {
+        root.refreshDownloaded();
         root.requestSerial++; // Drop the response of a request for the previous query
         root.loading = false;
         root.items = [];
@@ -240,22 +253,31 @@ Singleton {
 
     function select(id, darkMode = Appearance.m3colors.darkmode) {
         if (root.isDownloaded(id)) {
-            Wallpapers.select(root.downloadedFiles[id], darkMode);
-            return;
-        }
-        if (root.options.steamUser.length === 0) {
-            root.retryAfterLogin = id;
-            root.openLogin();
+            // The file may have been deleted; existsProc downloads it again then
+            existsProc.itemId = id;
+            existsProc.darkMode = darkMode;
+            existsProc.exec(["test", "-f", root.downloadedFiles[id]]);
             return;
         }
         root.applyAfterDownload = id;
         downloadProc.darkMode = darkMode;
+        if (root.options.steamUser.length === 0 || root.loginRequired) {
+            root.waitForLogin([id]);
+            return;
+        }
         if (root.currentDownload !== id && !root.isQueued(id)) root.queue = [...root.queue, id];
         root.processQueue();
     }
 
+    // Holds downloads back until steamLogin.qml reports a sign-in
+    function waitForLogin(ids) {
+        root.pendingLogin = [...root.pendingLogin, ...ids.filter(id => !root.pendingLogin.includes(id))];
+        root.openLogin();
+    }
+
     function cancel(id) {
         root.queue = root.queue.filter(queued => queued !== id);
+        root.pendingLogin = root.pendingLogin.filter(pending => pending !== id);
         if (root.applyAfterDownload === id) root.applyAfterDownload = "";
         if (root.currentDownload === id) downloadProc.signal(15);
     }
@@ -281,7 +303,8 @@ Singleton {
     }
 
     function openLogin() {
-        Quickshell.execDetached(["qs", "-p", root.loginQmlPath]);
+        // The lock is held while the window is open, so a second call does nothing
+        Quickshell.execDetached(["flock", "-n", root.loginLockPath, "qs", "-p", root.loginQmlPath]);
     }
 
     function reportError(message) {
@@ -320,10 +343,12 @@ Singleton {
                     Wallpapers.select(downloadProc.donePath, downloadProc.darkMode);
                 }
             } else if (["guard", "auth"].includes(downloadProc.errorCode)) {
+                // The rest of the queue would fail the same way
                 root.loginRequired = true;
-                root.retryAfterLogin = id;
+                const waiting = [id, ...root.queue];
+                root.queue = [];
                 root.reportError(Translation.tr("Sign in to Steam to download Workshop wallpapers"));
-                root.openLogin();
+                root.waitForLogin(waiting);
             } else if (downloadProc.errorText.length > 0) {
                 root.reportError(downloadProc.errorText);
             } else if (exitCode !== 0 && exitCode !== 143) { // 143: cancelled
@@ -339,12 +364,32 @@ Singleton {
     IpcHandler {
         target: "wallpaperEngine"
 
-        // Called by steamLogin.qml after a successful sign-in
-        function loginFinished(): void {
+        // Called by steamLogin.qml after a successful sign-in. The account comes
+        // with the call because this shell may not have reloaded the config yet.
+        function loginFinished(user: string): void {
+            if (user.length > 0 && root.options.steamUser !== user) root.options.steamUser = user;
             root.loginRequired = false;
-            const id = root.retryAfterLogin;
-            root.retryAfterLogin = "";
-            if (id.length > 0) root.select(id);
+            const waiting = root.pendingLogin;
+            root.pendingLogin = [];
+            root.queue = [...root.queue, ...waiting.filter(id => id !== root.currentDownload && !root.isQueued(id))];
+            root.processQueue();
+        }
+    }
+
+    Process {
+        id: existsProc
+        property string itemId: ""
+        property bool darkMode: Appearance.m3colors.darkmode
+        onExited: (exitCode, exitStatus) => {
+            const id = existsProc.itemId;
+            if (exitCode === 0) {
+                Wallpapers.select(root.downloadedFiles[id], existsProc.darkMode);
+                return;
+            }
+            const files = Object.assign({}, root.downloadedFiles);
+            delete files[id];
+            root.downloadedFiles = files;
+            root.select(id, existsProc.darkMode);
         }
     }
 

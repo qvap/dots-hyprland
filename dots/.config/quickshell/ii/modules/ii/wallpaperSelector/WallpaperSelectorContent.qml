@@ -19,6 +19,8 @@ MouseArea {
     readonly property var activeGrid: root.workshopMode ? workshopGrid : grid
 
     onWorkshopModeChanged: {
+        // The field may not change (e.g. "" -> ""), so onTextChanged cannot be relied on to reset this
+        Wallpapers.searchQuery = "";
         filterField.text = root.workshopMode ? WallpaperEngine.searchQuery : "";
         if (root.workshopMode) WallpaperEngine.ensureLoaded();
     }

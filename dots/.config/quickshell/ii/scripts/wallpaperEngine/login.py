@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Interactive steamcmd login for steamLogin.qml. On success steamcmd caches the
-session, and the password can be saved to the keyring for download.py.
+session, and the password can be saved to the keyring for download.py. The
+password is typed into steamcmd's prompt, never put on the command line or in a file.
 
 Input (stdin, one per line):
     <password>            first line
@@ -17,15 +18,17 @@ Output (one event per line):
 """
 import argparse
 import os
-import pty
 import re
 import select
+import signal
 import subprocess
 import sys
-import tempfile
+
+from steamcmd_pty import kill_tree, spawn
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # Prompts end without a newline, so they are matched against the unfinished line too
+PASSWORD_PROMPT = "password:"
 PROMPTS = {
     "steam guard code:": ("NEED_CODE", "email"),
     "two-factor code:": ("NEED_CODE", "mobile"),
@@ -43,10 +46,6 @@ EVENTS = [
 
 def emit(*parts):
     print(" ".join(str(p) for p in parts), flush=True)
-
-
-def quote(value):
-    return '"' + value.replace('"', '\\"') + '"'
 
 
 def store_password(user, password):
@@ -68,24 +67,23 @@ def main():
         emit("ERROR", "password", "Empty password")
         return 1
 
-    fd, runscript = tempfile.mkstemp(prefix="steamcmd-login-", suffix=".txt", dir=os.environ.get("XDG_RUNTIME_DIR"))
-    with os.fdopen(fd, "w") as f:  # mkstemp creates it with mode 600
-        f.write(f"login {quote(args.user)} {quote(password)}\nquit\n")
-
     emit("STATUS", "connecting")
-    master, slave = pty.openpty()
     try:
-        process = subprocess.Popen([args.steamcmd, "+runscript", runscript], stdin=slave, stdout=slave, stderr=slave, close_fds=True)
+        process, master = spawn([args.steamcmd, "+login", args.user, "+quit"])
     except FileNotFoundError:
-        os.remove(runscript)
         emit("ERROR", "steamcmd", f"'{args.steamcmd}' not found")
         return 1
-    finally:
-        os.close(slave)
+
+    def on_signal(signum, _):
+        kill_tree(process)
+        sys.exit(128 + signum)
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGHUP, on_signal)
 
     result = None
     buffer = ""
     stdin_open = True
+    password_sent = False
     try:
         while result is None:
             readable, _, _ = select.select([master] + ([sys.stdin] if stdin_open else []), [], [])
@@ -93,7 +91,7 @@ def main():
                 line = sys.stdin.readline()
                 if not line or line.strip() == "CANCEL":
                     stdin_open = False
-                    process.kill()
+                    kill_tree(process)
                     break
                 if line.startswith("CODE "):
                     emit("STATUS", "checking")
@@ -115,12 +113,20 @@ def main():
                                 result = event
                             else:
                                 emit(*event)
+                if PASSWORD_PROMPT in buffer.lower() or any(PASSWORD_PROMPT in line.lower() for line in lines):
+                    buffer = ""
+                    if password_sent:  # Asked again: the password was rejected
+                        result = ("ERROR", "password", "Wrong account name or password")
+                    else:
+                        os.write(master, (password + "\n").encode())
+                        password_sent = True
                 for marker, event in PROMPTS.items():
                     if marker in buffer.lower():
                         emit(*event)
                         buffer = ""
-    finally:
-        os.remove(runscript)
+    except BaseException:
+        kill_tree(process)
+        raise
 
     try:
         return finish(process, master, result, stdin_open, args, password)
@@ -142,7 +148,7 @@ def finish(process, master, result, stdin_open, args, password):
             store_password(args.user, password)
         emit("DONE")
         return 0
-    process.kill()
+    kill_tree(process)
     process.wait()
     if result:
         emit(*result)
