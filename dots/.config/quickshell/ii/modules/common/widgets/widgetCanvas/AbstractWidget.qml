@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.modules.common
+import qs.services
 import qs
 
 /*
@@ -170,7 +171,7 @@ MouseArea {
 
     Rectangle {
         anchors.fill: parent
-        visible: root.selected && root.showSelectionBorder && !Config.options.background.widgetsLocked
+        visible: root.selected && root.showSelectionBorder && !DesktopWidgets.locked
         color: "transparent"
         border.width: 2
         border.color: Appearance.colors.colPrimary

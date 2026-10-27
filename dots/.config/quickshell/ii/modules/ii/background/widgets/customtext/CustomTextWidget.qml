@@ -28,7 +28,7 @@ AbstractBackgroundWidget {
 
     implicitWidth: Math.max(editor.implicitWidth, editor.length === 0 ? placeholder.implicitWidth : 0) + root.padding * 2
     implicitHeight: editor.implicitHeight + root.padding * 2
-    draggable: placementStrategy === "free" && !Config.options.background.widgetsLocked && !root.editing
+    draggable: placementStrategy === "free" && !DesktopWidgets.locked && !root.editing
 
     onEditingChanged: GlobalStates.desktopWidgetKeyboardFocus = root.editing
     Component.onDestruction: if (root.editing) GlobalStates.desktopWidgetKeyboardFocus = false
@@ -165,7 +165,7 @@ AbstractBackgroundWidget {
     ResizeHandler {
         anchorItem: root
         hoverActive: root.containsMouse
-        locked: Config.options.background.widgetsLocked || root.editing
+        locked: DesktopWidgets.locked || root.editing
         currentWidth: root.width
         resizeMode: "diagonal"
         strokeCol: root.textColor

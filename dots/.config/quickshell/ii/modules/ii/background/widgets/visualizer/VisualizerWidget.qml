@@ -30,7 +30,7 @@ AbstractBackgroundWidget {
     implicitHeight: isRing ? ringSize : shaderStyle ? bandHeight : barsHeight
     x: isRing ? targetX : 0
     y: isRing ? targetY : screenHeight - implicitHeight
-    draggable: isRing && placementStrategy === "free" && !Config.options.background.widgetsLocked
+    draggable: isRing && placementStrategy === "free" && !DesktopWidgets.locked
     hoverEnabled: isRing
     // Full-width band styles are decoration only: let clicks reach the desktop beneath
     acceptedButtons: isRing ? (Qt.LeftButton | Qt.RightButton) : Qt.NoButton
@@ -146,7 +146,7 @@ AbstractBackgroundWidget {
     ResizeHandler {
         anchorItem: root
         hoverActive: root.containsMouse
-        locked: Config.options.background.widgetsLocked || !root.isRing
+        locked: DesktopWidgets.locked || !root.isRing
         currentWidth: root.ringSize
         resizeMode: "diagonal"
         onResized: newValue => root.ringSizeOverride = Math.round(Math.min(Math.max(newValue, 200), 900))

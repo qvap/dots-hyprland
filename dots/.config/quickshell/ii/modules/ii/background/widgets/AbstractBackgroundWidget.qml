@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 import qs.modules.common
+import qs.services
 import qs.modules.common.functions
 import qs.modules.common.widgets.widgetCanvas
 
@@ -55,7 +56,7 @@ AbstractWidget {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
-    draggable: placementStrategy === "free" && !Config.options.background.widgetsLocked
+    draggable: placementStrategy === "free" && !DesktopWidgets.locked
 
     function requestDelete() {
         if (root.instanceIndex < 0) {

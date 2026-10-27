@@ -127,7 +127,7 @@ AbstractBackgroundWidget {
         ResizeHandler {
             anchorItem: stickerImage
             hoverActive: root.containsMouse
-            locked: Config.options.background.widgetsLocked
+            locked: DesktopWidgets.locked
             currentWidth: root.modeWidth
             resizeMode: "diagonal"
             rotatable: true

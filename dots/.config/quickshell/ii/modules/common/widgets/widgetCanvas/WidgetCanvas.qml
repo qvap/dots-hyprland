@@ -1,5 +1,6 @@
 import QtQuick
 import qs.modules.common
+import qs.services
 import qs.modules.common.widgets
 import qs
 
@@ -9,7 +10,7 @@ MouseArea {
     property int gridSize: 24
     property bool showGrid: false
     readonly property bool isWidgetCanvas: true
-    readonly property bool gridVisible: showGrid && Config.options.background.showGrid
+    readonly property bool gridVisible: (showGrid && Config.options.background.showGrid) || GlobalStates.widgetEditorOpen
 
     property bool centerXActive: false
     property bool centerYActive: false
@@ -172,7 +173,7 @@ MouseArea {
     // Keyboard focus is only needed for deleting/moving unlocked widgets;
     // text-editing widgets request it themselves
     function requestKeyboardFocus() {
-        if (Config.options.background.widgetsLocked) return
+        if (DesktopWidgets.locked) return
         GlobalStates.desktopWidgetKeyboardFocus = true
         root.forceActiveFocus()
     }
@@ -187,7 +188,7 @@ MouseArea {
     }
 
     onPressed: (mouse) => {
-        if (Config.options.background.widgetsLocked) return
+        if (DesktopWidgets.locked) return
         root.selecting = true
         root.selectionStartPoint = Qt.point(mouse.x, mouse.y)
         root.selectionRect = Qt.rect(mouse.x, mouse.y, 0, 0)

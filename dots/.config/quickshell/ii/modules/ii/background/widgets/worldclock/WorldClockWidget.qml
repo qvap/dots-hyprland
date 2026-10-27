@@ -368,7 +368,7 @@ AbstractBackgroundWidget {
                 anchorItem: contentRect
                 corner: "topRight"
                 hoverActive: root.containsMouse
-                locked: Config.options.background.widgetsLocked || root.showingSettings || root.sizeMode !== "4x1" || root.clockCount < 2
+                locked: DesktopWidgets.locked || root.showingSettings || root.sizeMode !== "4x1" || root.clockCount < 2
                 onClicked: {
                     root.isVertical = !root.isVertical
                     root.configEntry.vertical = root.isVertical
@@ -378,7 +378,7 @@ AbstractBackgroundWidget {
             ResizeHandler {
                 anchorItem: contentRect
                 hoverActive: root.containsMouse
-                locked: Config.options.background.widgetsLocked || root.showingSettings
+                locked: DesktopWidgets.locked || root.showingSettings
                 currentWidth: root.widgetWidth
                 onResizedXY: (dx, dy, startWidth) => { root.sizeMode = root.modeForWidth(startWidth + dx) }
                 onResizeFinished: { root.configEntry.sizeMode = root.sizeMode }

@@ -47,7 +47,7 @@ AbstractBackgroundWidget {
         if (mouse.button === Qt.LeftButton) DesktopWidgets.pickImage(path => root.setEntry({ path: path }))
     }
     onWheel: (wheel) => {
-        if (Config.options.background.widgetsLocked) return
+        if (DesktopWidgets.locked) return
         const names = ShapeUtils.names
         const step = wheel.angleDelta.y < 0 ? 1 : -1
         root.setEntry({ shape: names[(names.indexOf(root.shapeName) + step + names.length) % names.length] })
@@ -172,7 +172,7 @@ AbstractBackgroundWidget {
         ResizeHandler{
             anchorItem: imageShape
             hoverActive: root.containsMouse
-            locked: Config.options.background.widgetsLocked
+            locked: DesktopWidgets.locked
             currentWidth: root.modeWidth
             resizeMode: "diagonal"
             z: 1

@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs
 import qs.modules.common
 
 Singleton {
@@ -31,9 +32,11 @@ Singleton {
         { key: "sticker",     icon: "sticker",           name: Translation.tr("Sticker") }
     ]
 
+    // The widget editor unlocks moving and resizing without touching the saved lock
+    readonly property bool locked: Config.options.background.widgetsLocked && !GlobalStates.widgetEditorOpen
+
     readonly property var hidden: Array.from(Config.options.background.widgets.menuHidden)
     readonly property var menuItems: catalog.filter(w => !hidden.includes(w.key))
-    readonly property int enabledCount: catalog.filter(w => isEnabled(w.key)).length
 
     function isEnabled(key) {
         return Config.options.background.widgets[key].enable;

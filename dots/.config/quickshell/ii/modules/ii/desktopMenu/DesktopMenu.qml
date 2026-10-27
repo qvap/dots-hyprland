@@ -92,16 +92,6 @@ Scope {
                 right: true
             }
 
-            property Component openSubmenuComponent: null
-            property real submenuAnchorY: 0
-            property real submenuWidth: 284
-
-            Timer {
-                id: submenuCloseTimer
-                interval: 250
-                onTriggered: menuWindow.openSubmenuComponent = null
-            }
-
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -168,11 +158,6 @@ Scope {
                         }
                     }
 
-                    Component {
-                        id: widgetsSubmenu
-                        WidgetsSubmenu {}
-                    }
-
                     ColumnLayout {
                         id: rowsColumn
                         Layout.fillWidth: true
@@ -228,21 +213,12 @@ Scope {
                                         }
                                     }
 
-                                    HoverHandler {
-                                        enabled: menuRow.modelData.kind === "widgets"
-                                        onHoveredChanged: {
-                                            if (hovered) {
-                                                submenuCloseTimer.stop()
-                                                menuWindow.submenuAnchorY = menuCard.y + rowButton.mapToItem(menuCard, 0, 0).y
-                                                menuWindow.openSubmenuComponent = widgetsSubmenu
-                                            } else {
-                                                submenuCloseTimer.restart()
-                                            }
-                                        }
-                                    }
-
                                     onClicked: {
                                         switch (menuRow.modelData.kind) {
+                                        case "widgets":
+                                            GlobalStates.desktopMenuOpen = false
+                                            GlobalStates.widgetEditorOpen = true
+                                            break
                                         case "wallpaper":
                                             GlobalStates.desktopMenuOpen = false
                                             GlobalStates.wallpaperSelectorOpen = true
@@ -256,41 +232,6 @@ Scope {
                                 }
                             }
                         }
-                    }
-                }
-            }
-
-            // SubMenu
-            Loader {
-                id: submenuLoader
-                active: menuWindow.openSubmenuComponent !== null
-                width: menuWindow.submenuWidth
-                sourceComponent: menuWindow.openSubmenuComponent
-
-                x: (menuCard.x + menuCard.width + 8 + menuWindow.submenuWidth > menuWindow.width)
-                    ? menuCard.x - menuWindow.submenuWidth - 8
-                    : menuCard.x + menuCard.width + 8
-
-                y: Math.min(
-                    Math.max(menuWindow.submenuAnchorY, 8),
-                    menuWindow.height - (item?.implicitHeight ?? 0) - 8
-                )
-
-                scale: active ? 1.0 : 0.9
-                opacity: active ? 1.0 : 0.0
-                transformOrigin: Item.Center
-
-                Behavior on scale {
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
-                }
-                Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-
-                HoverHandler {
-                    onHoveredChanged: {
-                        if (hovered) submenuCloseTimer.stop()
-                        else submenuCloseTimer.restart()
                     }
                 }
             }

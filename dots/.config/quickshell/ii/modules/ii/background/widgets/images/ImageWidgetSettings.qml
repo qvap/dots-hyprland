@@ -35,7 +35,7 @@ Item {
 
     Rectangle {
         anchors { top: parent.top; right: parent.right; margins: 8 }
-        visible: !root.showingSettings && root.widget.containsMouse && !Config.options.background.widgetsLocked
+        visible: !root.showingSettings && root.widget.containsMouse && !DesktopWidgets.locked
         radius: Appearance.rounding.full
         color: gearArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
         implicitWidth: 28; implicitHeight: 28

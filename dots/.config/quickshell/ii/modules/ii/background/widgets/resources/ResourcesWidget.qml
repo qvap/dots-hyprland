@@ -115,7 +115,7 @@ AbstractBackgroundWidget {
     WidgetFlipHandle {
         anchorItem: root
         hoverActive: root.containsMouse
-        locked: Config.options.background.widgetsLocked
+        locked: DesktopWidgets.locked
         onClicked: {
             root.isVertical = !root.isVertical
             root.configEntry.vertical = root.isVertical

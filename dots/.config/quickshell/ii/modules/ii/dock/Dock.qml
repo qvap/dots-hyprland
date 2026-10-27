@@ -25,7 +25,7 @@ Scope { // Scope
             // Window
             required property var modelData
             screen: modelData
-            visible: !GlobalStates.screenLocked
+            visible: !GlobalStates.screenLocked && !GlobalStates.widgetEditorOpen
 
             property bool reveal: root.pinned || (Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || dockApps.requestDockShow || (!ToplevelManager.activeToplevel?.activated)
             readonly property real baseHeight: (Config.options?.dock.height ?? 70) + Appearance.sizes.elevationMargin + Appearance.sizes.hyprlandGapsOut

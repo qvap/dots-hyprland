@@ -144,7 +144,7 @@ AbstractBackgroundWidget {
         ResizeHandler {
             anchorItem: card
             hoverActive: root.containsMouse
-            locked: Config.options.background.widgetsLocked
+            locked: DesktopWidgets.locked
             currentWidth: card.implicitWidth
             resizeMode: "diagonal"
             onResizedXY: (dx, dy, startWidth) => {

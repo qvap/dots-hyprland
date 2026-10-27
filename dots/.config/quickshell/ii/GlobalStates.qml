@@ -35,6 +35,7 @@ Singleton {
     property bool sessionOpen: false
     property bool diSessionOpen: false
     property bool desktopMenuOpen: false
+    property bool widgetEditorOpen: false
     property var desktopMenuScreen: null
     property real desktopMenuX: 0
     property real desktopMenuY: 0
