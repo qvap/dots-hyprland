@@ -41,6 +41,9 @@ Singleton {
         }
         
         Appearance.m3colors.darkmode = (Appearance.m3colors.m3background.hslLightness < 0.5)
+        // Custom window border colors are stored as palette roles, so they
+        // have to be pushed to Hyprland again whenever the palette changes.
+        HyprlandConfig.applyBorderColors()
     }
 
     function resetFilePathNextTime() {

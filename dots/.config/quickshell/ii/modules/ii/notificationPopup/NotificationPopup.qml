@@ -20,7 +20,7 @@ Scope {
         readonly property bool hasPopups: Notifications.popupList.length > 0
         // Stays mapped while the last popup animates out
         property bool lingering: false
-        visible: (hasPopups || lingering) && !GlobalStates.screenLocked
+        visible: (hasPopups || lingering) && !GlobalStates.screenLocked && !GlobalStates.dynamicIslandEnabled
         onHasPopupsChanged: {
             lingering = !hasPopups;
             if (lingering) lingerTimer.restart();

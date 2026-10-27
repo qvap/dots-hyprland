@@ -32,6 +32,28 @@ handle_kde_material_you_colors() {
             ;;
     esac
     "$XDG_CONFIG_HOME"/matugen/templates/kde/kde-material-you-colors-wrapper.sh --scheme-variant "$kde_scheme_variant"
+
+    # kde-material-you-colors rewrites the KDE icon theme from its own config.
+    # Re-assert the managed theme after the wrapper (the manager enforces the policy).
+    apply_icon_override_safety_net "$mode_flag"
+}
+
+icon_theme_managed() {
+    [ -f "$SHELL_CONFIG_FILE" ] && [ -n "$(jq -r '.appearance.icons.theme // empty' "$SHELL_CONFIG_FILE" 2>/dev/null)" ]
+}
+
+update_icon_scheme() {
+    local mode_flag="$1"
+    local manager="$SCRIPT_DIR/../theming/icon-theme-manager.sh"
+    [ -x "$manager" ] && icon_theme_managed || return 0
+    bash "$manager" --sync --apply --mode "$mode_flag" --source wallpaper || true
+}
+
+apply_icon_override_safety_net() {
+    local mode_flag="$1"
+    local manager="$SCRIPT_DIR/../theming/icon-theme-manager.sh"
+    [ -x "$manager" ] && icon_theme_managed || return 0
+    bash "$manager" --post-kde --mode "$mode_flag" || true
 }
 
 pre_process() {
@@ -332,6 +354,7 @@ switch() {
         > "$STATE_DIR"/user/generated/material_colors.scss
     deactivate
     "$SCRIPT_DIR"/applycolor.sh
+    update_icon_scheme "$mode_flag"
 
     # Pass screen width, height, and wallpaper path to post_process
     max_width_desired="$(hyprctl monitors -j | jq '([.[].width] | min)' | xargs)"

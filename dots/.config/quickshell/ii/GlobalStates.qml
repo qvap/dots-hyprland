@@ -33,11 +33,24 @@ Singleton {
     property bool screenUnlockFailed: false
     property bool screenTranslatorOpen: false
     property bool sessionOpen: false
+    property bool diSessionOpen: false
+    property bool desktopMenuOpen: false
+    property var desktopMenuScreen: null
+    property real desktopMenuX: 0
+    property real desktopMenuY: 0
+    property bool desktopWidgetKeyboardFocus: false
+    property string osdIndicatorType: "volume"
     property bool superDown: false
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
     property bool workspaceShowNumbers: false
     property list<real> visualizerPoints: []
+
+    readonly property bool dynamicIslandEnabled: Config.options.bar.layouts.leftLayout.includes("dynamicIsland")
+        || Config.options.bar.layouts.middleLayout.includes("dynamicIsland")
+        || Config.options.bar.layouts.rightLayout.includes("dynamicIsland")
+    readonly property bool barCenterOnly: Config.options.bar.layouts.leftLayout.length === 0
+        && Config.options.bar.layouts.rightLayout.length === 0
 
     Process {
         id: cavaProc

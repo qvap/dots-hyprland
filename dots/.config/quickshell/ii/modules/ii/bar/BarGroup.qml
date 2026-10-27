@@ -12,6 +12,7 @@ Item {
     property real padding: (root.isMaterial && !root.paintMaterialPill) ? 0 : 5
     property color bgColor: Appearance.colors.colPrimaryContainer
     property Item morphingMedia: null
+    property bool paintBackground: true
     property alias visualBackground: background
 
     readonly property color resolvedGroupColor: {
@@ -42,6 +43,7 @@ Item {
 
     Rectangle {
         id: background
+        visible: root.paintBackground
         opacity: root.morphingMedia?.expansion > 0 ? 0 : 1
         anchors {
             fill: parent

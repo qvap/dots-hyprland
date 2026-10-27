@@ -49,27 +49,24 @@ Scope {
                     }
                 }
                 property bool superShow: false
-                readonly property bool islandInteracting: morphRegistry.interacting
-                readonly property bool hasIsland: [Config.options.bar.layouts.leftLayout,
-                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
-                    .some(layout => layout.includes("island"))
+                readonly property bool morphInteracting: morphRegistry.interacting
                 readonly property bool hasMorphingMedia: [Config.options.bar.layouts.leftLayout,
                     Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
                     .some(layout => layout.includes("media"))
                 readonly property BarModule.BarMorphRegistry morphRegistry: BarModule.BarMorphRegistry {}
-                property alias islandOverlay: islandOverlayLayer
-                readonly property bool islandExpanded: morphRegistry.expanded
-                onIslandExpandedChanged: {
-                    if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
+                property alias morphOverlay: morphOverlayLayer
+                readonly property bool morphExpanded: morphRegistry.expanded
+                onMorphExpandedChanged: {
+                    if (morphExpanded) GlobalFocusGrab.addDismissable(barRoot);
                     else GlobalFocusGrab.removeDismissable(barRoot);
                 }
                 function close() {
                     morphRegistry.collapseAll(null);
                 }
                 // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
-                Item { id: islandOverlayLayer; anchors.fill: parent; z: 100 }
+                Item { id: morphOverlayLayer; anchors.fill: parent; z: 100 }
 
-                property bool mustShow: hoverRegion.containsMouse || superShow || islandInteracting
+                property bool mustShow: hoverRegion.containsMouse || superShow || morphInteracting
                 exclusionMode: ExclusionMode.Ignore
                 property int normalExclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows))
                     ? 0
@@ -81,7 +78,7 @@ Scope {
                     ? Config.options.bar.frameThickness
                     : normalExclusiveZone
                 WlrLayershell.namespace: "quickshell:verticalBar"
-                implicitWidth: hasIsland || hasMorphingMedia ? Math.min(screen.width, Appearance.sizes.verticalBarWidth + Appearance.sizes.mediaControlsWidth + 32)
+                implicitWidth: hasMorphingMedia ? Math.min(screen.width, Appearance.sizes.verticalBarWidth + Appearance.sizes.mediaControlsWidth + 32)
                     : Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
                 mask: Region {
                     item: hoverMaskRegion

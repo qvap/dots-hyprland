@@ -14,6 +14,7 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings // So the module scanner also picks up what the pages import
 import qs.modules.common.functions as CF
 
 ApplicationWindow {
@@ -22,59 +23,76 @@ ApplicationWindow {
     property string firstRunFileContent: "This file is just here to confirm you've been greeted :>"
     property real contentPadding: 8
     property bool showNextTime: false
-    property var pages: [
-        {
-            name: Translation.tr("Quick"),
-            icon: "instant_mix",
-            component: "modules/settings/QuickConfig.qml"
-        },
-        {
-            name: Translation.tr("General"),
-            icon: "browse",
-            component: "modules/settings/GeneralConfig.qml"
-        },
-        {
-            name: Translation.tr("Profile"),
-            icon: "person",
-            component: "modules/settings/ProfileConfig.qml"
-        },
-        {
-            name: Translation.tr("Bar"),
-            icon: "toast",
-            iconRotation: 180,
-            component: "modules/settings/BarConfig.qml"
-        },
-        {
-            name: Translation.tr("Background"),
-            icon: "texture",
-            component: "modules/settings/BackgroundConfig.qml"
-        },
-        {
-            name: Translation.tr("Interface"),
-            icon: "bottom_app_bar",
-            component: "modules/settings/InterfaceConfig.qml"
-        },
-        {
-            name: Translation.tr("Services"),
-            icon: "settings",
-            component: "modules/settings/ServicesConfig.qml"
-        },
-        {
-            name: Translation.tr("Advanced"),
-            icon: "construction",
-            component: "modules/settings/AdvancedConfig.qml"
-        },
-        {
-            name: Translation.tr("Mods"),
-            icon: "graph_6",
-            component: "modules/settings/ModConfig.qml"
-        },
-        {
-            name: Translation.tr("About"),
-            icon: "info",
-            component: "modules/settings/About.qml"
-        }
-    ]
+    property var pages: {
+        const list = [
+            {
+                name: Translation.tr("Quick"),
+                icon: "instant_mix",
+                component: "modules/settings/QuickConfig.qml"
+            },
+            {
+                name: Translation.tr("General"),
+                icon: "browse",
+                component: "modules/settings/GeneralConfig.qml"
+            },
+            {
+                name: Translation.tr("Profile"),
+                icon: "person",
+                component: "modules/settings/ProfileConfig.qml"
+            },
+            {
+                name: Translation.tr("Bar"),
+                icon: "toast",
+                iconRotation: 180,
+                component: "modules/settings/BarConfig.qml"
+            },
+            {
+                name: Translation.tr("Background"),
+                icon: "texture",
+                component: "modules/settings/BackgroundConfig.qml"
+            },
+            {
+                name: Translation.tr("Interface"),
+                icon: "bottom_app_bar",
+                component: "modules/settings/InterfaceConfig.qml"
+            },
+            {
+                name: Translation.tr("Services"),
+                icon: "settings",
+                component: "modules/settings/ServicesConfig.qml"
+            },
+        ];
+        // Compositor settings: options are read live from the running compositor
+        if (WM.compositor === "hyprland")
+            list.push({
+                name: Translation.tr("Hyprland"),
+                icon: "select_window_2",
+                component: "modules/settings/HyprlandSettings.qml"
+            });
+        if (WM.compositor === "niri")
+            list.push({
+                name: Translation.tr("Niri"),
+                icon: "select_window_2",
+                component: "modules/settings/NiriSettings.qml"
+            });
+        return list.concat([
+            {
+                name: Translation.tr("Advanced"),
+                icon: "construction",
+                component: "modules/settings/AdvancedConfig.qml"
+            },
+            {
+                name: Translation.tr("Mods"),
+                icon: "graph_6",
+                component: "modules/settings/ModConfig.qml"
+            },
+            {
+                name: Translation.tr("About"),
+                icon: "info",
+                component: "modules/settings/About.qml"
+            }
+        ]);
+    }
     property int currentPage: 0
 
     visible: true

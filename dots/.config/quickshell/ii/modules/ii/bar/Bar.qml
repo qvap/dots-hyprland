@@ -72,27 +72,24 @@ Scope {
                     }
                 }
                 property bool superShow: false
-                readonly property bool islandInteracting: morphRegistry.interacting
-                readonly property bool hasIsland: [Config.options.bar.layouts.leftLayout,
-                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
-                    .some(layout => layout.includes("island"))
+                readonly property bool morphInteracting: morphRegistry.interacting
                 readonly property bool hasMorphingMedia: [Config.options.bar.layouts.leftLayout,
                     Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
                     .some(layout => layout.includes("media"))
                 readonly property BarMorphRegistry morphRegistry: BarMorphRegistry {}
-                property alias islandOverlay: islandOverlayLayer
-                readonly property bool islandExpanded: morphRegistry.expanded
-                onIslandExpandedChanged: {
-                    if (islandExpanded) GlobalFocusGrab.addDismissable(barRoot);
+                property alias morphOverlay: morphOverlayLayer
+                readonly property bool morphExpanded: morphRegistry.expanded
+                onMorphExpandedChanged: {
+                    if (morphExpanded) GlobalFocusGrab.addDismissable(barRoot);
                     else GlobalFocusGrab.removeDismissable(barRoot);
                 }
                 function close() {
                     morphRegistry.collapseAll(null);
                 }
                 // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
-                Item { id: islandOverlayLayer; anchors.fill: parent; z: 100 }
+                Item { id: morphOverlayLayer; anchors.fill: parent; z: 100 }
 
-                property bool mustShow: hoverRegion.containsMouse || superShow || islandInteracting
+                property bool mustShow: hoverRegion.containsMouse || superShow || morphInteracting
                 property var thisMonitorData: HyprlandData.monitors.find(m => m.name === barRoot.screen?.name)
                 property bool monitorHasFullscreen: HyprlandData.workspaceById[thisMonitorData?.activeWorkspace?.id]?.hasfullscreen ?? false
                 property bool monitorHasSpecialOpen: (thisMonitorData?.specialWorkspace?.name ?? "") !== ""
@@ -104,7 +101,7 @@ Scope {
                 // Overlay layer only while special workspace sits on top of a fullscreen window on this monitor,
                 // else Top layer so fullscreen apps cover the bar as normal (Hyprland buries Top layer under fullscreen+special).
                 WlrLayershell.layer: (monitorHasFullscreen && monitorHasSpecialOpen) ? WlrLayer.Overlay : WlrLayer.Top
-                implicitHeight: hasIsland || hasMorphingMedia ? Math.min(screen.height, Appearance.sizes.barHeight + Appearance.sizes.mediaControlsHeight + 32)
+                implicitHeight: hasMorphingMedia ? Math.min(screen.height, Appearance.sizes.barHeight + Appearance.sizes.mediaControlsHeight + 32)
                     : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
                 // When Overlay-layer, bar shares a layer with the screen-corner click zones (ScreenCorners.qml)
                 // and same-layer overlap is resolved by stacking, not layer priority - bar was winning and

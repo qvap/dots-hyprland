@@ -132,7 +132,7 @@ Item {
     // The area that accepts input while the pill is pulled out of the bar
     Item {
         id: pullCorridor
-        parent: root.barWindow?.islandOverlay ?? root
+        parent: root.barWindow?.morphOverlay ?? root
         x: root.compactBounds.x - (root.vertical && Config.options.bar.bottom ? root.pullThreshold : 0)
         y: root.compactBounds.y - (!root.vertical && Config.options.bar.bottom ? root.pullThreshold : 0)
         width: root.compactBounds.width + (root.vertical ? root.pullThreshold : 0)
@@ -141,7 +141,7 @@ Item {
 
     Item {
         id: overlay
-        parent: root.barWindow?.islandOverlay ?? root
+        parent: root.barWindow?.morphOverlay ?? root
         anchors.fill: parent
         visible: root.exposed
     }

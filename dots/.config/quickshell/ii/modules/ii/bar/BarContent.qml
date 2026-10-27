@@ -29,9 +29,9 @@ Item {
     readonly property var effectiveMiddleLayout: filterLayout(Config.options.bar.layouts.middleLayout)
     readonly property var effectiveRightLayout:  filterLayout(Config.options.bar.layouts.rightLayout)
     readonly property bool centerOnWorkspaces: Config.options.bar.centerOnWorkspaces
-        && (effectiveMiddleLayout.includes("workspaces") || effectiveMiddleLayout.includes("island"))
+        && (effectiveMiddleLayout.includes("workspaces") || effectiveMiddleLayout.includes("dynamicIsland"))
     readonly property int workspaceCenterIndex: effectiveMiddleLayout.includes("workspaces")
-        ? effectiveMiddleLayout.indexOf("workspaces") : effectiveMiddleLayout.indexOf("island")
+        ? effectiveMiddleLayout.indexOf("workspaces") : effectiveMiddleLayout.indexOf("dynamicIsland")
     property int middleLayoutRevision: 0
     readonly property real middleContentCenterOffset: {
         middleLayoutRevision
@@ -59,7 +59,7 @@ Item {
 
     function shouldPaintMaterialPill(name) {
         if (Config.options.bar.cornerStyle !== 3) return false;
-        const blacklist = ["workspaces", "island", "divisor", "powerButton", "docktoPanel", "leftSidebarButton", "activeWindow"];
+        const blacklist = ["workspaces", "dynamicIsland", "divisor", "powerButton", "docktoPanel", "leftSidebarButton", "activeWindow"];
         if (blacklist.includes(name)) {
             return false;
         }
@@ -145,8 +145,10 @@ Item {
         visible: centerOnly && Config.options.bar.showBackground && Config.options.bar.cornerStyle !== 2
         anchors.verticalCenter: parent.verticalCenter
         anchors.horizontalCenter: parent.horizontalCenter
-        width: middleRow.implicitWidth + 10
-        height: parent.height - (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut * 2 : 0)
+        width: GlobalStates.dynamicIslandEnabled
+            ? (Config.options.bar.cornerStyle === 1 ? middleRow.implicitWidth + 8 : middleRow.implicitWidth - 4)
+            : middleRow.implicitWidth + 10
+        height: GlobalStates.dynamicIslandEnabled ? parent.height : parent.height - (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut * 2 : 0)
         color: Config.options.bar.followFrameColor
             ? Appearance.getColorFromName(Config.options.bar.frameColor)
             : Appearance.colors.colLayer0
@@ -312,6 +314,22 @@ Item {
                 ? root.middleContentCenterOffset
                 : width / 2)
 
+            // Dynamic Island side widgets
+            Loader {
+                anchors.right: absoluteCenter.left
+                anchors.rightMargin: 8
+                anchors.verticalCenter: absoluteCenter.verticalCenter
+                active: Config.options.bar.dynamicIsland.leftWidget !== "none" && GlobalStates.dynamicIslandEnabled
+                source: active ? root.getWidgetUrl(Config.options.bar.dynamicIsland.leftWidget) : ""
+            }
+            Loader {
+                anchors.left: absoluteCenter.right
+                anchors.leftMargin: 8
+                anchors.verticalCenter: absoluteCenter.verticalCenter
+                active: Config.options.bar.dynamicIsland.rightWidget !== "none" && GlobalStates.dynamicIslandEnabled
+                source: active ? root.getWidgetUrl(Config.options.bar.dynamicIsland.rightWidget) : ""
+            }
+
             // Material pill wrapper
             Rectangle {
                 id: centerMaterialPill
@@ -342,6 +360,7 @@ Item {
                             Layout.fillHeight: true
                             currentIndex: index
                             totalCount: root.effectiveMiddleLayout.length
+                            paintBackground: modelData !== "dynamicIsland"
                             paintMaterialPill: root.shouldPaintMaterialPill(modelData)
                             bgColor: root.getMaterialPillColor(modelData, centerMaterialWidgetLoader.item)
                             Loader {
@@ -389,6 +408,7 @@ Item {
                         Layout.fillHeight: true
                         currentIndex: index
                         totalCount: root.effectiveMiddleLayout.length
+                        paintBackground: modelData !== "dynamicIsland"
                         Loader {
                             Layout.fillHeight: true
                             source: root.getWidgetUrl(modelData)

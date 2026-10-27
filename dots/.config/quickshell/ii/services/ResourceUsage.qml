@@ -11,6 +11,7 @@ import Quickshell.Io
  */
 Singleton {
     id: root
+    property int consumers: 0 // Widgets showing usage; polling here runs regardless
     property real memoryTotal: 1
     property real memoryFree: 0
     property real memoryUsed: memoryTotal - memoryFree

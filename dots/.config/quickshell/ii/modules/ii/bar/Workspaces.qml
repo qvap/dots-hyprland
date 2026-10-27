@@ -19,7 +19,7 @@ ButtonMouseArea {
     }
 
     property alias workspaceModel: wsModel
-    property bool showSpecialIndicator: !(root.QsWindow.window?.hasIsland ?? false)
+    property bool showSpecialIndicator: true
 
     property bool vertical: Config.options.bar.vertical
     readonly property bool specialSauce: Config.options.mods.specialSauce

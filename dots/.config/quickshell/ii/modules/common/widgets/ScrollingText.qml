@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 
-// A looping name viewport shared by the workspace pill and Island.
+// A looping name viewport shared by the workspace pill and other bar widgets.
 Item {
     id: root
     property string text: ""

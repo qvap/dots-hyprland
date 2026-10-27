@@ -42,3 +42,6 @@ end
 
 -- Shell overrides --
 require("hyprland.shellOverrides.main")
+if is_file_exists(HOME .. "/.config/hypr/hyprland/shellOverrides/animations.lua") then
+    require("hyprland.shellOverrides.animations") -- Animation preset picked in the shell settings
+end

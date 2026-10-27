@@ -48,9 +48,9 @@ ContentPage {
             icon: "steppers"
         },
         {
-            id: "island",
-            name: Translation.tr("Island"),
-            icon: "pill"
+            id: "dynamicIsland",
+            name: Translation.tr("Dynamic Island"),
+            icon: "nest_wifi_pro"
         },
         {
             id: "weatherBar",
@@ -144,11 +144,19 @@ ContentPage {
         },
     ]
 
+    function isUsed(id) {
+        return [...Config.options.bar.layouts.leftLayout, ...Config.options.bar.layouts.middleLayout, ...Config.options.bar.layouts.rightLayout].includes(id);
+    }
+
     function availableFor() {
         let used = [...Config.options.bar.layouts.leftLayout, ...Config.options.bar.layouts.middleLayout, ...Config.options.bar.layouts.rightLayout];
+        if (used.includes("dynamicIsland"))
+            used.push(Config.options.bar.dynamicIsland.leftWidget, Config.options.bar.dynamicIsland.rightWidget);
         const multipleAllowed = ["visualizer", "divisor"];
         return allWidgets.filter(w => {
             if (w.id === "divisor" && Config.options.bar.borderless !== "transparent")
+                return false;
+            if (w.id === "dynamicIsland" && Config.options.bar.vertical)
                 return false;
             return !used.includes(w.id) || multipleAllowed.includes(w.id);
         });
@@ -296,6 +304,65 @@ ContentPage {
                     availableWidgets: page.availableFor()
                     getWidgetName: page.getWidgetName
                     onUpdate: list => Config.options.bar.layouts.rightLayout = list
+                }
+            }
+        }
+
+        ContentSection {
+            icon: "nest_wifi_pro"
+            shape: MaterialShape.Shape.Cookie4Sided
+            title: Translation.tr("Dynamic Island")
+            visible: page.isUsed("dynamicIsland")
+
+            GroupedList {
+                ConfigSelectionArray {
+                    text: Translation.tr("Left widget")
+                    icon: "right_panel_open"
+                    currentValue: Config.options.bar.dynamicIsland.leftWidget
+                    onSelected: newValue => {
+                        Config.options.bar.dynamicIsland.leftWidget = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr(""), icon: "block", value: "none" },
+                        { displayName: Translation.tr("Clock"), icon: "schedule", value: "clockWidget" },
+                        { displayName: Translation.tr("Weather"), icon: "partly_cloudy_day", value: "weatherBar" },
+                        { displayName: Translation.tr("Updates"), icon: "update", value: "updatesCount" }
+                    ]
+                }
+                ConfigSelectionArray {
+                    text: Translation.tr("Right widget")
+                    icon: "left_panel_open"
+                    currentValue: Config.options.bar.dynamicIsland.rightWidget
+                    onSelected: newValue => {
+                        Config.options.bar.dynamicIsland.rightWidget = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr(""), icon: "block", value: "none" },
+                        { displayName: Translation.tr("System icons"), icon: "settings", value: "systemIcons" },
+                        { displayName: Translation.tr("Tray"), icon: "apps", value: "sysTray" },
+                        { displayName: Translation.tr("Util buttons"), icon: "widgets", value: "utilButtons" }
+                    ]
+                }
+                ConfigSelectionArray {
+                    text: Translation.tr("Visualizer style")
+                    icon: "graphic_eq"
+                    currentValue: Config.options.bar.dynamicIsland.visualizerStyle
+                    onSelected: newValue => {
+                        Config.options.bar.dynamicIsland.visualizerStyle = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr(""), icon: "block", value: "none" },
+                        { displayName: Translation.tr("Dots"), icon: "steppers", value: "dots" },
+                        { displayName: Translation.tr("Wave"), icon: "ssid_chart", value: "wave" }
+                    ]
+                }
+                ConfigSwitch {
+                    buttonIcon: "play_circle"
+                    text: Translation.tr("Show media controls")
+                    checked: Config.options.bar.dynamicIsland.showMediaControls
+                    onCheckedChanged: {
+                        Config.options.bar.dynamicIsland.showMediaControls = checked;
+                    }
                 }
             }
         }

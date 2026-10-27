@@ -14,10 +14,6 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
-import qs.modules.ii.background.widgets
-import qs.modules.ii.background.widgets.clock
-import qs.modules.ii.background.widgets.weather
-
 Variants {
     id: root
     model: Quickshell.screens
@@ -40,8 +36,10 @@ Variants {
         property int workspaceChunkSize: Config?.options.bar.workspaces.shown ?? 10
         property int totalWorkspaces: Math.ceil(lastWorkspaceId / workspaceChunkSize) * workspaceChunkSize
         // Wallpaper
-        property bool wallpaperIsVideo: Config.options.background.wallpaperPath.endsWith(".mp4") || Config.options.background.wallpaperPath.endsWith(".webm") || Config.options.background.wallpaperPath.endsWith(".mkv") || Config.options.background.wallpaperPath.endsWith(".avi") || Config.options.background.wallpaperPath.endsWith(".mov")
-        property string wallpaperPath: wallpaperIsVideo ? Config.options.background.thumbnailPath : Config.options.background.wallpaperPath
+        // A separate lock screen wallpaper can be set in Settings > Background
+        property string sourcePath: (GlobalStates.screenLocked && Config.options.background.lockWall !== "") ? Config.options.background.lockWall : Config.options.background.wallpaperPath
+        property bool wallpaperIsVideo: [".mp4", ".webm", ".mkv", ".avi", ".mov"].some(ext => sourcePath.endsWith(ext))
+        property string wallpaperPath: wallpaperIsVideo ? Config.options.background.thumbnailPath : sourcePath
         property bool wallpaperSafetyTriggered: {
             const enabled = Config.options.workSafety.enable.wallpaper;
             const sensitiveWallpaper = (CF.StringUtils.stringListContainsSubstring(wallpaperPath.toLowerCase(), Config.options.workSafety.triggerCondition.fileKeywords));
@@ -77,6 +75,8 @@ Variants {
         WlrLayershell.layer: (GlobalStates.screenLocked && !scaleAnim.running) ? WlrLayer.Overlay : WlrLayer.Bottom
         // WlrLayershell.layer: WlrLayer.Bottom
         WlrLayershell.namespace: "quickshell:background"
+        // Desktop widgets take the keyboard while being edited (text entry, Del to remove)
+        WlrLayershell.keyboardFocus: GlobalStates.desktopWidgetKeyboardFocus ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         anchors {
             top: true
             bottom: true
@@ -159,6 +159,19 @@ Variants {
 
         Item {
             anchors.fill: parent
+
+            // Desktop menu
+            MouseArea {
+                anchors.fill: parent
+                z: -2
+                acceptedButtons: Qt.RightButton
+                onClicked: mouse => {
+                    GlobalStates.desktopMenuScreen = bgRoot.screen;
+                    GlobalStates.desktopMenuX = mouse.x;
+                    GlobalStates.desktopMenuY = mouse.y;
+                    GlobalStates.desktopMenuOpen = true;
+                }
+            }
 
             // Wallpaper
             StyledImage {
@@ -261,19 +274,8 @@ Variants {
 
             WidgetCanvas {
                 id: widgetCanvas
-                width: parent.width
-                height: parent.height
-                readonly property real parallaxFactor: {
-                    var f = Config.options.background.parallax.widgetsFactor;
-                    return f / bgRoot.parallaxRation;
-                }
-                readonly property real baseWallpaperOffsetX: (bgRoot.screen.width - wallpaper.width) / 2
-                readonly property real baseWallpaperOffsetY: (bgRoot.screen.height - wallpaper.height) / 2
-                readonly property real wallpaperTotalOffsetX: wallpaper.x - baseWallpaperOffsetX
-                readonly property real wallpaperTotalOffsetY: wallpaper.y - baseWallpaperOffsetY
-                readonly property bool locked: GlobalStates.screenLocked
-                x: wallpaperTotalOffsetX * parallaxFactor * !locked
-                y: wallpaperTotalOffsetY * parallaxFactor * !locked
+                // Widgets stay put: no parallax with the wallpaper
+                anchors.fill: parent
 
                 transitions: Transition {
                     PropertyAnimation {
@@ -289,27 +291,11 @@ Variants {
                     }
                 }
 
-                FadeLoader {
-                    shown: Config.options.background.widgets.weather.enable
-                    sourceComponent: WeatherWidget {
-                        screenWidth: bgRoot.screen.width
-                        screenHeight: bgRoot.screen.height
-                        scaledScreenWidth: bgRoot.screen.width
-                        scaledScreenHeight: bgRoot.screen.height
-                        wallpaperScale: 1
-                    }
-                }
-
-                FadeLoader {
-                    shown: Config.options.background.widgets.clock.enable
-                    sourceComponent: ClockWidget {
-                        screenWidth: bgRoot.screen.width
-                        screenHeight: bgRoot.screen.height
-                        scaledScreenWidth: bgRoot.screen.width
-                        scaledScreenHeight: bgRoot.screen.height
-                        wallpaperScale: 1
-                        wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
-                    }
+                WidgetsLoader {
+                    anchors.fill: parent
+                    screen: bgRoot.screen
+                    wallpaperItem: wallpaper
+                    wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
                 }
             }
         }

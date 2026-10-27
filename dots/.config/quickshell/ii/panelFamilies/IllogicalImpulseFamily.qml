@@ -5,6 +5,7 @@ import qs.modules.common
 import qs.modules.ii.background
 import qs.modules.ii.bar
 import qs.modules.ii.cheatsheet
+import qs.modules.ii.desktopMenu
 import qs.modules.ii.dock
 import qs.modules.ii.fileBasket
 import qs.modules.ii.lock
@@ -46,4 +47,5 @@ Scope {
     PanelLoader { component: SidebarRight {} }
     PanelLoader { extraCondition: Config.options.bar.vertical; component: VerticalBar {} }
     PanelLoader { component: WallpaperSelector {} }
+    PanelLoader { component: DesktopMenu {} }
 }
