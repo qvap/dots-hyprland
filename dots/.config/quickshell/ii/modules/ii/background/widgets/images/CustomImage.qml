@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import Quickshell
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -16,18 +17,49 @@ AbstractBackgroundWidget {
     configEntryName: "customImage"
     hoverEnabled: true
 
-    property string imagePath: Config.options.background.widgets.customImage.path ?? ""
+    property string imagePath: root.configEntry.path ?? ""
     property bool dropHover: false
-    property int shapeType: ShapeUtils.getShape(Config.options.background.widgets.customImage.shape ?? "Cookie4Sided")
-    property real widgetSize: Config.options.background.widgets.customImage.size ?? 200
+    property string shapeName: root.configEntry.shape ?? "Cookie4Sided"
+    property int shapeType: ShapeUtils.getShape(root.shapeName)
+    // Shapes distort when stretched, so wide sizes fall back to a rounded rectangle
+    readonly property bool useShape: root.sizeMode === "2x2"
+    readonly property real rectRadius: Appearance.rounding.verylarge
+
+    // Same grid sizes as ImageCardWidget
+    readonly property real cardSpacing: 12
+    readonly property real snapWidth2: 132 * 2 + root.cardSpacing
+    readonly property real snapWidth3: 132 * 3 + root.cardSpacing * 2
+    readonly property real cardHeight: 120
+    readonly property real doubleHeight: root.cardHeight * 2 + root.cardSpacing
+    property string dragMode: ""
+    readonly property string sizeMode: root.dragMode !== "" ? root.dragMode : (root.configEntry.sizeMode === "2x3" ? "2x3" : "2x2")
+    // 2x2 is square so shapes keep their proportions
+    readonly property real modeWidth: root.sizeMode === "2x3" ? root.snapWidth3 : root.doubleHeight
+    readonly property real modeHeight: root.doubleHeight
+
+    // Smaller sizes are too small for an image; only 2x2 and 2x3 are offered
+    function modeForDrag(dx, dy, startWidth) {
+        var width = startWidth + dx
+        return width < (root.snapWidth2 + root.snapWidth3) / 2 ? "2x2" : "2x3"
+    }
+
+    onDoubleClicked: (mouse) => {
+        if (mouse.button === Qt.LeftButton) DesktopWidgets.pickImage(path => root.setEntry({ path: path }))
+    }
+    onWheel: (wheel) => {
+        if (Config.options.background.widgetsLocked) return
+        const names = ShapeUtils.names
+        const step = wheel.angleDelta.y < 0 ? 1 : -1
+        root.setEntry({ shape: names[(names.indexOf(root.shapeName) + step + names.length) % names.length] })
+    }
 
     implicitWidth: contentItem.implicitWidth
     implicitHeight: contentItem.implicitHeight
 
     Item {
         id: contentItem
-        implicitWidth: root.widgetSize
-        implicitHeight: root.widgetSize
+        implicitWidth: root.modeWidth
+        implicitHeight: root.modeHeight
 
         Behavior on implicitWidth {
             animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
@@ -43,9 +75,16 @@ AbstractBackgroundWidget {
             shape: root.shapeType
             visible: false
         }
+        Rectangle {
+            id: shadowRect
+            anchors.fill: parent
+            radius: root.rectRadius
+            color: Appearance.colors.colPrimaryContainer
+            visible: false
+        }
 
         StyledDropShadow {
-            target: shadowShape
+            target: root.useShape ? shadowShape : shadowRect
             z: -1
             visible: Config.options.background.widgets.shadow
         }
@@ -54,16 +93,32 @@ AbstractBackgroundWidget {
             id: imageShape
             anchors.fill: parent
             z: 0
-            color: Appearance.colors.colPrimaryContainer
+            color: root.useShape ? Appearance.colors.colPrimaryContainer : "transparent"
             shape: root.shapeType
 
             layer.enabled: true
             layer.effect: OpacityMask {
-                maskSource: MaterialShape {
+                maskSource: Item {
                     width: imageShape.width
                     height: imageShape.height
-                    shape: root.shapeType
+                    MaterialShape {
+                        anchors.fill: parent
+                        shape: root.shapeType
+                        visible: root.useShape
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: root.rectRadius
+                        visible: !root.useShape
+                    }
                 }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: root.rectRadius
+                color: Appearance.colors.colPrimaryContainer
+                visible: !root.useShape
             }
 
             StyledImage {
@@ -80,7 +135,7 @@ AbstractBackgroundWidget {
             // Placeholder + hover hint
             MaterialSymbol {
                 anchors.centerIn: parent
-                iconSize: contentItem.implicitWidth / 3
+                iconSize: Math.min(contentItem.implicitWidth, contentItem.implicitHeight) / 3
                 text: root.dropHover ? "download" : "image"
                 fill: root.dropHover ? 1 : 0
                 color: root.dropHover
@@ -106,7 +161,7 @@ AbstractBackgroundWidget {
                         var ext = cleanPath.split(".").pop().toLowerCase()
                         var accepted = ["png","jpg","jpeg","webp","avif","bmp","gif","tiff","tif"]
                         if (accepted.indexOf(ext) !== -1) {
-                            Config.options.background.widgets.customImage.path = cleanPath
+                            root.setEntry({ path: cleanPath })
                         }
                     }
                     root.dropHover = false
@@ -118,15 +173,36 @@ AbstractBackgroundWidget {
             anchorItem: imageShape
             hoverActive: root.containsMouse
             locked: Config.options.background.widgetsLocked
-            currentWidth: root.widgetSize
+            currentWidth: root.modeWidth
             resizeMode: "diagonal"
             z: 1
-            onResized: (newValue) => {
-                root.widgetSize = Math.max(80, newValue)
-            }
+            onResizedXY: (dx, dy, startWidth) => { root.dragMode = root.modeForDrag(dx, dy, startWidth) }
             onResizeFinished: {
-                Config.options.background.widgets.customImage.size = root.widgetSize
+                root.setEntry({ sizeMode: root.sizeMode })
+                root.dragMode = ""
             }
         }
+    }
+
+    ImageWidgetSettings {
+        widget: root
+        settings: [
+            ConfigSelectionShapeArray {
+                currentValue: root.shapeName
+                options: ShapeUtils.names
+                shapeColor: Appearance.colors.colOnSecondaryContainer
+                enabled: root.useShape
+                opacity: enabled ? 1 : 0.4
+                onSelected: newValue => root.setEntry({ shape: newValue })
+            },
+            ConfigSelectionArray {
+                currentValue: root.sizeMode
+                onSelected: newValue => root.setEntry({ sizeMode: newValue })
+                options: [
+                    { displayName: "2x2", icon: "grid_view", value: "2x2" },
+                    { displayName: "2x3", icon: "view_module", value: "2x3" }
+                ]
+            }
+        ]
     }
 }

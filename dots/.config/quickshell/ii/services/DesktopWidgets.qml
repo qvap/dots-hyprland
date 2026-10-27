@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.modules.common
 
 Singleton {
@@ -20,7 +21,11 @@ Singleton {
         { key: "todo",        icon: "add_task",          name: Translation.tr("To-Do") },
         { key: "notes",       icon: "note_stack_add",    name: Translation.tr("Notes") },
         { key: "timers",      icon: "timer",             name: Translation.tr("Timers") },
-        { key: "images",      icon: "photo_library",     name: Translation.tr("Image Converter") },
+        { key: "images",      icon: "photo_library",     name: Translation.tr("Image Converter") }
+    ]
+
+    // Image widgets aren't toggled: each button adds another copy (see addImageWidget)
+    readonly property var imageCatalog: [
         { key: "customImage", icon: "image",             name: Translation.tr("Custom Image") },
         { key: "imageCard",   icon: "photo_size_select_large", name: Translation.tr("Image Card") },
         { key: "sticker",     icon: "sticker",           name: Translation.tr("Sticker") }
@@ -50,5 +55,28 @@ Singleton {
 
     function toggleStar(key) {
         setStarred(key, !isStarred(key));
+    }
+
+    function addImageWidget(type) {
+        const list = Array.from(Config.options.background.widgets.imageInstances);
+        const offset = (list.length % 8) * 36;
+        list.push({ type: type, placementStrategy: "free", x: 400 + offset, y: 100 + offset, z: 0, path: "" });
+        Config.options.background.widgets.imageInstances = list;
+    }
+
+    property var pickCallback: null
+    function pickImage(callback) {
+        root.pickCallback = callback;
+        imagePicker.running = true;
+    }
+
+    Process {
+        id: imagePicker
+        command: ["kdialog", "--getopenfilename", Quickshell.env("HOME") + "/Pictures", "image/png image/jpeg image/webp image/gif image/avif image/bmp image/tiff image/svg+xml"]
+        stdout: StdioCollector { id: imagePickerOutput }
+        onExited: code => {
+            const path = imagePickerOutput.text.trim();
+            if (code === 0 && path !== "") root.pickCallback?.(path);
+        }
     }
 }

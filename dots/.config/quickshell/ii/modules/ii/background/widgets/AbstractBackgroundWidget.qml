@@ -19,7 +19,22 @@ AbstractWidget {
     property Item wallpaperItem: null
 
     property bool visibleWhenLocked: Config.options.lock.showWidgets
-    property var configEntry: Config.options.background.widgets[configEntryName]
+    // >= 0: this is an extra copy stored in background.widgets.imageInstances
+    property int instanceIndex: -1
+    property var configEntry: instanceIndex < 0
+        ? Config.options.background.widgets[configEntryName]
+        : Config.options.background.widgets.imageInstances[instanceIndex]
+    // Entries of a list<var> aren't observed, so copies are saved by reassigning the whole list
+    function setEntry(patch) {
+        if (root.instanceIndex < 0) {
+            for (const key in patch) root.configEntry[key] = patch[key];
+            return;
+        }
+        const list = Array.from(Config.options.background.widgets.imageInstances);
+        list[root.instanceIndex] = Object.assign({}, list[root.instanceIndex], patch);
+        Config.options.background.widgets.imageInstances = list;
+    }
+
     property string placementStrategy: configEntry.placementStrategy
     property real targetX: Math.max(0, Math.min(configEntry.x, scaledScreenWidth - width))
     property real targetY : Math.max(0, Math.min(configEntry.y, scaledScreenHeight - height))
@@ -28,19 +43,28 @@ AbstractWidget {
     y: targetY
     z: targetZ
     visible: opacity > 0
-    opacity: (GlobalStates.screenLocked && !visibleWhenLocked) ? 0 : 1
+    opacity: ((GlobalStates.screenLocked && !visibleWhenLocked) ? 0 : 1) * (1 - removeProgress)
     Behavior on opacity {
+        // Restarting every frame would stall the removal animation
+        enabled: !root.removing
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
-    scale: (draggable && containsPress) ? 1.05 : 1
+    scale: ((draggable && containsPress) ? 1.05 : 1) * (1 - removeProgress)
     Behavior on scale {
+        enabled: !root.removing
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
     draggable: placementStrategy === "free" && !Config.options.background.widgetsLocked
 
     function requestDelete() {
-        Config.options.background.widgets[root.configEntryName].enable = false
+        if (root.instanceIndex < 0) {
+            Config.options.background.widgets[root.configEntryName].enable = false
+            return
+        }
+        const list = Array.from(Config.options.background.widgets.imageInstances)
+        list.splice(root.instanceIndex, 1)
+        Config.options.background.widgets.imageInstances = list
     }
     function restoreXYBinding() {
         root.x = Qt.binding(() => root.targetX);
@@ -49,9 +73,7 @@ AbstractWidget {
     }
 
     function commitPosition() {
-        configEntry.x = root.x;
-        configEntry.y = root.y;
-        configEntry.z = root.z;
+        root.setEntry({ x: root.x, y: root.y, z: root.z });
         root.targetX = Qt.binding(() => Math.max(0, Math.min(configEntry.x, scaledScreenWidth - width)));
         root.targetY = Qt.binding(() => Math.max(0, Math.min(configEntry.y, scaledScreenHeight - height)));
         root.targetZ = Qt.binding(() => configEntry.z);

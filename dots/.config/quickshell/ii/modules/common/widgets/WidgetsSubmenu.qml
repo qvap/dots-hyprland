@@ -41,14 +41,14 @@ Item {
             Layout.fillWidth: true
             buttonIcon: "shadow"
             text: Translation.tr("Shadow")
-            checked: Config.options.background.widgets.shadow 
+            checked: Config.options.background.widgets.shadow
             onCheckedChanged: Config.options.background.widgets.shadow = checked
         }
         ConfigSwitch {
             Layout.fillWidth: true
             buttonIcon: "blur_on"
             text: Translation.tr("Blur widgets")
-            checked: Config.options.background.widgets.blurWidgets 
+            checked: Config.options.background.widgets.blurWidgets
             onCheckedChanged: Config.options.background.widgets.blurWidgets = checked
         }
 
@@ -83,6 +83,27 @@ Item {
                 text: modelData.name
                 checked: Config.options.background.widgets[modelData.key].enable
                 onCheckedChanged: Config.options.background.widgets[modelData.key].enable = checked
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 12
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Add image widget")
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colOnLayer1
+            }
+            Repeater {
+                model: DesktopWidgets.imageCatalog
+                delegate: IconToolbarButton {
+                    required property var modelData
+                    implicitHeight: 36
+                    text: modelData.icon
+                    onClicked: DesktopWidgets.addImageWidget(modelData.key)
+                    StyledToolTip { text: modelData.name }
+                }
             }
         }
     }

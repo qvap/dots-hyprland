@@ -387,6 +387,9 @@ Singleton {
                         property string sizeMode: "1x2"
                     }
 
+                    // Extra copies of image widgets: [{ type: "customImage" | "imageCard" | "sticker", x, y, z, path, ... }]
+                    property list<var> imageInstances: []
+
                     property JsonObject sticker: JsonObject {
                         property bool enable: false
                         property list<var> items: [] // if someone sees this and wants to add more stickers, make a PR too lazy 

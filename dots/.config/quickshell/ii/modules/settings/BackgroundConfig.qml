@@ -917,36 +917,6 @@ ContentPage {
     }
 
     ContentSection {
-        icon: "imagesmode"
-        title: Translation.tr("Widget: Images")
-
-        ConfigComboBox {
-            Layout.fillWidth: true
-            buttonIcon: "interests"
-            text: Translation.tr("Custom image shape")
-            searchable: true
-            model: ["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"].map(shape => ({ displayName: shape, value: shape }))
-            currentValue: Config.options.background.widgets.customImage.shape
-            onSelected: newValue => Config.options.background.widgets.customImage.shape = newValue
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Image card layout")
-            ConfigSelectionArray {
-                currentValue: Config.options.background.widgets.imageCard.sizeMode
-                onSelected: newValue => Config.options.background.widgets.imageCard.sizeMode = newValue
-                options: [
-                    { displayName: "1x1", icon: "crop_square", value: "1x1" },
-                    { displayName: "1x2", icon: "crop_landscape", value: "1x2" },
-                    { displayName: "1x3", icon: "crop_16_9", value: "1x3" },
-                    { displayName: "2x2", icon: "grid_view", value: "2x2" },
-                    { displayName: "2x3", icon: "view_module", value: "2x3" }
-                ]
-            }
-        }
-    }
-
-    ContentSection {
         icon: "lock"
         title: Translation.tr("Lock screen wallpaper")
 

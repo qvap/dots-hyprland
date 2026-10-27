@@ -18,6 +18,9 @@ MouseArea {
     property bool pinnedBottom: false
 
     property bool selected: false
+    // 0..1, driven by the canvas while the widget is being removed
+    property real removeProgress: 0
+    property bool removing: false
     property bool groupDragActive: false
 
     acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -36,7 +39,9 @@ MouseArea {
     onReleased: (mouse) => {
         if (mouse.button !== Qt.LeftButton) return
         var canvas = findCanvas(root.parent)
-        if (canvas) canvas.requestKeyboardFocus()
+        if (!canvas) return
+        canvas.dropOnTrash(root)
+        canvas.requestKeyboardFocus()
     }
 
     onClicked: (mouse) => {
@@ -80,6 +85,12 @@ MouseArea {
         canvas.setCenterActive(nearX, nearY)
     }
 
+    function updateDragFeedback() {
+        root.updateCenterHighlight()
+        var canvas = findCanvas(root.parent)
+        if (canvas) canvas.updateTrashHover(root)
+    }
+
     function commitPosition() {}
     function requestDelete() {}
 
@@ -96,8 +107,8 @@ MouseArea {
         x: root.x
         y: root.y
 
-        onXChanged: if (root.dragging) root.updateCenterHighlight()
-        onYChanged: if (root.dragging) root.updateCenterHighlight()
+        onXChanged: if (root.dragging) root.updateDragFeedback()
+        onYChanged: if (root.dragging) root.updateDragFeedback()
     }
 
     Binding {

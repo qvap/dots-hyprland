@@ -1,5 +1,6 @@
 import QtQuick
 import qs.modules.common
+import qs.modules.common.widgets
 import qs
 
 MouseArea {
@@ -23,9 +24,46 @@ MouseArea {
     property real groupDragStartY: 0
 
     function deleteSelected() {
-        const toDelete = root.registeredWidgets.filter(w => w.selected)
-        for (const widget of toDelete) widget.requestDelete()
+        root.removeWithAnimation(root.registeredWidgets.filter(w => w.selected))
         root.clearSelection()
+    }
+
+    property var pendingRemoval: []
+    function removeWithAnimation(widgets) {
+        root.pendingRemoval = root.pendingRemoval.concat(widgets)
+        for (const widget of widgets) {
+            widget.removing = true
+            shrinkAnimation.createObject(root, { target: widget }).start()
+        }
+        removalTimer.restart()
+    }
+
+    Component {
+        id: shrinkAnimation
+        NumberAnimation {
+            property: "removeProgress"
+            to: 1
+            duration: 280
+            easing.type: Easing.InBack
+            onFinished: destroy()
+        }
+    }
+
+    Timer {
+        id: removalTimer
+        interval: 300
+        onTriggered: {
+            // Copies share one list: delete from the highest index so earlier indices stay valid
+            const widgets = root.pendingRemoval.sort((a, b) => (b.instanceIndex ?? -1) - (a.instanceIndex ?? -1))
+            root.pendingRemoval = []
+            for (const widget of widgets) widget.requestDelete()
+            // Copy delegates are reused for the entries that shifted into their index
+            for (const widget of root.registeredWidgets)
+                if ((widget.instanceIndex ?? -1) >= 0) {
+                    widget.removeProgress = 0
+                    widget.removing = false
+                }
+        }
     }
 
     Keys.onPressed: (event) => {
@@ -35,7 +73,26 @@ MouseArea {
         }
     }
 
+    property bool widgetDragging: false
+    property bool trashHovered: false
+
+    function updateTrashHover(widget) {
+        const trashRect = Qt.rect(trash.x, trash.y, trash.width, trash.height)
+        root.trashHovered = root.rectsIntersect(trashRect, Qt.rect(widget.x, widget.y, widget.width, widget.height))
+    }
+
+    // Called on release; removal is delayed by the animation, so the widget's own position commit runs first
+    function dropOnTrash(widget) {
+        if (!root.trashHovered) return
+        root.trashHovered = false
+        if (widget.selected) root.deleteSelected()
+        else root.removeWithAnimation([widget])
+    }
+
     function setDragging(active) {
+        root.widgetDragging = active
+        // Reset only on start: release may arrive after the drag ends
+        if (active) root.trashHovered = false
         root.showGrid = active
         if (!active) {
             root.centerXActive = false
@@ -242,6 +299,32 @@ MouseArea {
         border.width: 1
         border.color: Appearance.colors.colPrimary
         z: 9999
+    }
+
+    Rectangle {
+        id: trash
+        readonly property bool barOnTop: !Config.options.bar.vertical && !Config.options.bar.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: root.widgetDragging ? (barOnTop ? Appearance.sizes.barHeight : 0) + 24 : -height
+        width: root.trashHovered ? 88 : 72
+        height: width
+        radius: Appearance.rounding.full
+        z: 10000
+        opacity: root.widgetDragging ? 1 : 0
+        color: root.trashHovered ? Appearance.colors.colError : Appearance.colors.colLayer2
+
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: "delete"
+            iconSize: parent.width / 2.4
+            fill: root.trashHovered ? 1 : 0
+            color: root.trashHovered ? Appearance.colors.colOnError : Appearance.colors.colOnLayer2
+        }
+
+        Behavior on y { animation: Appearance.animation.elementMove.numberAnimation.createObject(this) }
+        Behavior on width { animation: Appearance.animation.elementResize.numberAnimation.createObject(this) }
+        Behavior on opacity { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this) }
+        Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
     }
 
     Component {

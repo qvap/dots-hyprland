@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Widgets
 import qs
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.widgets.widgetCanvas
@@ -13,6 +14,10 @@ AbstractBackgroundWidget {
 
     property string imagePath: root.configEntry.path ?? ""
     property bool dropHover: false
+
+    onDoubleClicked: (mouse) => {
+        if (mouse.button === Qt.LeftButton) DesktopWidgets.pickImage(path => root.setEntry({ path: path }))
+    }
 
     readonly property real cardSpacing: 12
     readonly property real singleWidth: 132
@@ -62,7 +67,7 @@ AbstractBackgroundWidget {
             var cleanPath = drop.urls[0].toString().replace(/^file:\/\//, "")
             var ext = cleanPath.split(".").pop().toLowerCase()
             var accepted = ["png", "jpg", "jpeg", "webp", "avif", "bmp", "gif", "tiff", "tif"]
-            if (accepted.indexOf(ext) !== -1) root.configEntry.path = cleanPath
+            if (accepted.indexOf(ext) !== -1) root.setEntry({ path: cleanPath })
         }
         root.dropHover = false
     }
@@ -145,9 +150,26 @@ AbstractBackgroundWidget {
             resizeMode: "diagonal"
             onResizedXY: (dx, dy, startWidth) => { root.dragMode = root.modeForDrag(dx, dy, startWidth) }
             onResizeFinished: {
-                root.configEntry.sizeMode = root.sizeMode
+                root.setEntry({ sizeMode: root.sizeMode })
                 root.dragMode = ""
             }
         }
+    }
+
+    ImageWidgetSettings {
+        widget: root
+        settings: [
+            ConfigSelectionArray {
+                currentValue: root.sizeMode
+                onSelected: newValue => root.setEntry({ sizeMode: newValue })
+                options: [
+                    { displayName: "1x1", icon: "crop_square", value: "1x1" },
+                    { displayName: "1x2", icon: "crop_landscape", value: "1x2" },
+                    { displayName: "1x3", icon: "crop_16_9", value: "1x3" },
+                    { displayName: "2x2", icon: "grid_view", value: "2x2" },
+                    { displayName: "2x3", icon: "view_module", value: "2x3" }
+                ]
+            }
+        ]
     }
 }

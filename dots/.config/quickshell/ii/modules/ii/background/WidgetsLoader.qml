@@ -117,9 +117,23 @@ Item {
             pinnedBottom: true
         }
     }
+    Repeater {
+        model: Config.options.background.widgets.imageInstances.length
+        delegate: FadeLoader {
+            required property int index
+            readonly property int instanceIndex: index
+            readonly property string type: Config.options.background.widgets.imageInstances[index]?.type ?? ""
+            shown: root.onThisScreen
+            sourceComponent: type === "customImage" ? customImageComp
+                : type === "imageCard" ? imageCardComp
+                : type === "sticker" ? stickerComp : null
+        }
+    }
+
     Component {
         id: imageCardComp
         ImageCardWidget {
+            instanceIndex: parent?.instanceIndex ?? -1
             screenWidth: root.screen.width
             screenHeight: root.screen.height
             scaledScreenWidth: root.screen.width
@@ -131,6 +145,7 @@ Item {
     Component {
         id: customImageComp
         CustomImage {
+            instanceIndex: parent?.instanceIndex ?? -1
             screenWidth: root.screen.width
             screenHeight: root.screen.height
             scaledScreenWidth: root.screen.width
@@ -142,6 +157,7 @@ Item {
     Component {
         id: stickerComp
         StickerWidget {
+            instanceIndex: parent?.instanceIndex ?? -1
             screenWidth: root.screen.width
             screenHeight: root.screen.height
             scaledScreenWidth: root.screen.width
