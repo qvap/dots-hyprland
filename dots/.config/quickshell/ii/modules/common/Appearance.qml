@@ -34,6 +34,22 @@ Singleton {
     property real backgroundTransparency: Config?.options.appearance.transparency.enable ? Config?.options.appearance.transparency.automatic ? autoBackgroundTransparency : Config?.options.appearance.transparency.backgroundTransparency : 0
     property real contentTransparency: Config?.options.appearance.transparency.automatic ? autoContentTransparency : Config?.options.appearance.transparency.contentTransparency
 
+    function getColorFromName(name) {
+        switch (name) {
+            case "primary":            return colors.colPrimary
+            case "secondary":          return colors.colSecondary
+            case "tertiary":           return colors.colTertiary
+            case "primaryContainer":   return colors.colPrimaryContainer
+            case "secondaryContainer": return colors.colSecondaryContainer
+            case "tertiaryContainer":  return colors.colTertiaryContainer
+            case "layer0":             return colors.colLayer0
+            case "layer1":             return colors.colLayer1
+            case "layer0Border":       return colors.colLayer0Border
+            case "black":              return "black"
+            default:                   return colors.colPrimaryContainer
+        }
+    }
+
     m3colors: QtObject {
         property bool darkmode: true
         property bool transparent: false
@@ -117,6 +133,9 @@ Singleton {
         // Layer 0
         property color colLayer0Base: ColorUtils.mix(m3colors.m3background, m3colors.m3primary, Config.options.appearance.extraBackgroundTint ? 0.99 : 1)
         property color colLayer0: ColorUtils.transparentize(colLayer0Base, root.backgroundTransparency)
+        // Surface aliases used by panels ported from end4-pC
+        property color colUiBackground: colLayer0
+        property color colUiPopupBackground: colLayer1Base
         property color colOnLayer0: m3colors.m3onBackground
         property color colLayer0Hover: ColorUtils.transparentize(ColorUtils.mix(colLayer0, colOnLayer0, 0.9, root.contentTransparency))
         property color colLayer0Active: ColorUtils.transparentize(ColorUtils.mix(colLayer0, colOnLayer0, 0.8, root.contentTransparency))

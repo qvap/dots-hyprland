@@ -10,13 +10,13 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.bar as BarModule
 
 Scope {
     id: bar
     property bool showBarBackground: Config.options.bar.showBackground
 
     Variants {
-        // For each monitor
         model: {
             const screens = Quickshell.screens;
             const list = Config.options.bar.screenList;
@@ -28,7 +28,7 @@ Scope {
             id: barLoader
             active: GlobalStates.barOpen && !GlobalStates.screenLocked
             required property ShellScreen modelData
-            component: PanelWindow { // Bar window
+            component: PanelWindow {
                 id: barRoot
                 screen: barLoader.modelData
 
@@ -38,35 +38,62 @@ Scope {
                     id: showBarTimer
                     interval: (Config?.options.bar.autoHide.showWhenPressingSuper.delay ?? 100)
                     repeat: false
-                    onTriggered: {
-                        barRoot.superShow = true
-                    }
+                    onTriggered: { barRoot.superShow = true }
                 }
                 Connections {
                     target: GlobalStates
                     function onSuperDownChanged() {
                         if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable) return;
                         if (GlobalStates.superDown) showBarTimer.restart();
-                        else {
-                            showBarTimer.stop();
-                            barRoot.superShow = false;
-                        }
+                        else { showBarTimer.stop(); barRoot.superShow = false; }
                     }
                 }
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow
+                readonly property bool morphInteracting: morphRegistry.interacting
+                readonly property bool hasMorphingMedia: [Config.options.bar.layouts.leftLayout,
+                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
+                    .some(layout => layout.includes("media"))
+                readonly property BarModule.BarMorphRegistry morphRegistry: BarModule.BarMorphRegistry {}
+                property alias morphOverlay: morphOverlayLayer
+                readonly property bool morphExpanded: morphRegistry.expanded
+                onMorphExpandedChanged: {
+                    if (morphExpanded) GlobalFocusGrab.addDismissable(barRoot);
+                    else GlobalFocusGrab.removeDismissable(barRoot);
+                }
+                function close() {
+                    morphRegistry.collapseAll(null);
+                }
+                // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
+                Item { id: morphOverlayLayer; anchors.fill: parent; z: 100 }
+
+                property bool mustShow: hoverRegion.containsMouse || superShow || morphInteracting
                 exclusionMode: ExclusionMode.Ignore
-                exclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 :
-                    Appearance.sizes.baseVerticalBarWidth + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                property int normalExclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows))
+                    ? 0
+                    : Appearance.sizes.baseVerticalBarWidth
+                        + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                        + (Config.options.bar.cornerStyle === 3 ? (Appearance.sizes.hyprlandGapsOut || 5) : 0)
+
+                exclusiveZone: (barContent.centerOnly && Config.options.bar.centerOnlyReserveFrame)
+                    ? Config.options.bar.frameThickness
+                    : normalExclusiveZone
                 WlrLayershell.namespace: "quickshell:verticalBar"
-                // WlrLayershell.layer: WlrLayer.Overlay // TODO enable this when bar can hide when fullscreen
-                implicitWidth: Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
+                implicitWidth: hasMorphingMedia ? Math.min(screen.width, Appearance.sizes.verticalBarWidth + Appearance.sizes.mediaControlsWidth + 32)
+                    : Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
                 mask: Region {
                     item: hoverMaskRegion
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.morphRegistry.active?.pullSurface ?? null
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.morphRegistry.active?.expandedSurface ?? null
+                        radius: barRoot.morphRegistry.active?.expandedSurface?.radius ?? 0
+                    }
                 }
                 color: "transparent"
 
-                // Positioning
                 anchors {
                     left: !Config.options.bar.bottom
                     right: Config.options.bar.bottom
@@ -74,15 +101,13 @@ Scope {
                     bottom: true
                 }
 
-                // Include in focus grab
-                Component.onCompleted: {
-                    GlobalFocusGrab.addPersistent(barRoot);
-                }
+                Component.onCompleted: { GlobalFocusGrab.addPersistent(barRoot); }
                 Component.onDestruction: {
                     GlobalFocusGrab.removePersistent(barRoot);
+                    GlobalFocusGrab.removeDismissable(barRoot);
                 }
 
-                MouseArea  {
+                MouseArea {
                     id: hoverRegion
                     hoverEnabled: true
                     anchors.fill: parent
@@ -96,17 +121,78 @@ Scope {
                         }
                     }
 
+                    RoundCorner {
+                        id: topPillCorner
+                        visible: barContent.centerOnly && showBarBackground && Config.options.bar.cornerStyle === 0
+                        y: barContent.centerPillY - implicitSize
+                        implicitSize: Appearance.rounding.screenRounding
+                        color: Config.options.bar.followFrameColor
+                            ? Appearance.getColorFromName(Config.options.bar.frameColor)
+                            : Appearance.colors.colLayer0
+                        corner: RoundCorner.CornerEnum.BottomLeft
+
+                        states: State {
+                            name: "right"
+                            when: Config.options.bar.bottom
+                            AnchorChanges {
+                                target: topPillCorner
+                                anchors.left: undefined
+                                anchors.right: barContent.right
+                            }
+                            PropertyChanges {
+                                target: topPillCorner
+                                corner: RoundCorner.CornerEnum.BottomRight
+                            }
+                        }
+                        AnchorChanges {
+                            target: topPillCorner
+                            anchors.left: barContent.right
+                            anchors.right: undefined
+                        }
+                    }
+
+                    RoundCorner {
+                        id: bottomPillCorner
+                        visible: barContent.centerOnly && showBarBackground && Config.options.bar.cornerStyle === 0
+                        y: barContent.centerPillY + barContent.centerPillHeight
+                        implicitSize: Appearance.rounding.screenRounding
+                        color: Config.options.bar.followFrameColor
+                            ? Appearance.getColorFromName(Config.options.bar.frameColor)
+                            : Appearance.colors.colLayer0
+                        corner: RoundCorner.CornerEnum.TopLeft
+
+                        states: State {
+                            name: "right"
+                            when: Config.options.bar.bottom
+                            AnchorChanges {
+                                target: bottomPillCorner
+                                anchors.left: undefined
+                                anchors.right: barContent.right
+                            }
+                            PropertyChanges {
+                                target: bottomPillCorner
+                                corner: RoundCorner.CornerEnum.TopRight
+                            }
+                        }
+                        AnchorChanges {
+                            target: bottomPillCorner
+                            anchors.left: barContent.right
+                            anchors.right: undefined
+                        }
+                    }
+
                     VerticalBarContent {
                         id: barContent
-                        
+
                         implicitWidth: Appearance.sizes.verticalBarWidth
                         anchors {
                             top: parent.top
                             bottom: parent.bottom
                             left: parent.left
                             right: undefined
-                            leftMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.verticalBarWidth : 0
-                            rightMargin: 0
+                            leftMargin: (Config?.options.bar.autoHide.enable && !mustShow) 
+                                ? -Appearance.sizes.verticalBarWidth 
+                                : (Config.options.bar.cornerStyle === 3 ? (Appearance.sizes.hyprlandGapsOut || 5) : 0)
                         }
                         Behavior on anchors.leftMargin {
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -130,7 +216,9 @@ Scope {
                             PropertyChanges {
                                 target: barContent
                                 anchors.topMargin: 0
-                                anchors.rightMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                                anchors.rightMargin: (Config?.options.bar.autoHide.enable && !mustShow)
+                                    ? -Appearance.sizes.verticalBarWidth
+                                    : (Config.options.bar.cornerStyle === 3 ? (Appearance.sizes.hyprlandGapsOut || 5) : 0)
                             }
                         }
                     }
@@ -145,7 +233,7 @@ Scope {
                             right: undefined
                         }
                         width: Appearance.rounding.screenRounding
-                        active: showBarBackground && Config.options.bar.cornerStyle === 0 // Hug
+                        active: showBarBackground && Config.options.bar.cornerStyle === 0 && !barContent.centerOnly
 
                         states: State {
                             name: "right"
@@ -165,22 +253,18 @@ Scope {
                             implicitHeight: Appearance.rounding.screenRounding
                             RoundCorner {
                                 id: topCorner
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    top: parent.top
-                                }
-
+                                anchors { left: parent.left; right: parent.right; top: parent.top }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: showBarBackground ? Appearance.colors.colLayer0 : "transparent"
-
+                                color: showBarBackground
+                                    ? (Config.options.bar.followFrameColor && Config.options.bar.frameColor
+                                        ? Appearance.getColorFromName(Config.options.bar.frameColor)
+                                        : Appearance.colors.colLayer0)
+                                    : "transparent"
                                 corner: RoundCorner.CornerEnum.TopLeft
                                 states: State {
                                     name: "bottom"
                                     when: Config.options.bar.bottom
-                                    PropertyChanges {
-                                        topCorner.corner: RoundCorner.CornerEnum.TopRight
-                                    }
+                                    PropertyChanges { topCorner.corner: RoundCorner.CornerEnum.TopRight }
                                 }
                             }
                             RoundCorner {
@@ -191,15 +275,16 @@ Scope {
                                     right: Config.options.bar.bottom ? parent.right : undefined
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: showBarBackground ? Appearance.colors.colLayer0 : "transparent"
-
+                                color: showBarBackground
+                                    ? (Config.options.bar.followFrameColor && Config.options.bar.frameColor
+                                        ? Appearance.getColorFromName(Config.options.bar.frameColor)
+                                        : Appearance.colors.colLayer0)
+                                    : "transparent"
                                 corner: RoundCorner.CornerEnum.BottomLeft
                                 states: State {
                                     name: "bottom"
                                     when: Config.options.bar.bottom
-                                    PropertyChanges {
-                                        bottomCorner.corner: RoundCorner.CornerEnum.BottomRight
-                                    }
+                                    PropertyChanges { bottomCorner.corner: RoundCorner.CornerEnum.BottomRight }
                                 }
                             }
                         }
@@ -211,44 +296,24 @@ Scope {
 
     IpcHandler {
         target: "bar"
-
-        function toggle(): void {
-            GlobalStates.barOpen = !GlobalStates.barOpen
-        }
-
-        function close(): void {
-            GlobalStates.barOpen = false
-        }
-
-        function open(): void {
-            GlobalStates.barOpen = true
-        }
+        function toggle(): void { GlobalStates.barOpen = !GlobalStates.barOpen }
+        function close(): void { GlobalStates.barOpen = false }
+        function open(): void { GlobalStates.barOpen = true }
     }
 
-    GlobalShortcut {
+    CompositorGlobalShortcut {
         name: "barToggle"
         description: "Toggles bar on press"
-
-        onPressed: {
-            GlobalStates.barOpen = !GlobalStates.barOpen;
-        }
+        onPressed: { GlobalStates.barOpen = !GlobalStates.barOpen; }
     }
-
-    GlobalShortcut {
+    CompositorGlobalShortcut {
         name: "barOpen"
         description: "Opens bar on press"
-
-        onPressed: {
-            GlobalStates.barOpen = true;
-        }
+        onPressed: { GlobalStates.barOpen = true; }
     }
-
-    GlobalShortcut {
+    CompositorGlobalShortcut {
         name: "barClose"
         description: "Closes bar on press"
-
-        onPressed: {
-            GlobalStates.barOpen = false;
-        }
+        onPressed: { GlobalStates.barOpen = false; }
     }
 }

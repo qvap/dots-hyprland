@@ -3,26 +3,44 @@
 # Replicates Throne's Subscription::RawUpdater dispatch/parse behaviour and
 # emits a sing-box >= 1.12 (target 1.13.12) configuration.
 #
-# Argv: <config_path> <raw_subscription_file>
+# Argv: <config_path> <raw_subscription_file> [extras_path]
 # Exit 0 on success (config written), 1 on failure (no nodes / read error).
+# The config is the subscription's part only (nodes, DNS, TUN): routing rules,
+# FakeIP, the remote DNS server and Hysteria2 speeds are composed in later by
+# routing.py (virtualprivatenetwork.sh), so a settings change does not need
+# the subscription again.
+# extras_path: link parameters sing-box has no field for but Xray does
+# (REALITY spiderX, gRPC authority / multi mode, XHTTP), JSON { tag: { ... } }
+# for xray_split.py, which moves such nodes to Xray.
 
-import sys
-import re
-import json
 import base64
+import json
+import re
+import sys
 import urllib.parse
 
 # ---------------------------------------------------------------------------
 # Collected nodes
 # ---------------------------------------------------------------------------
-OUTBOUNDS = []     # proxy outbounds (everything except wireguard)
-ENDPOINTS = []     # wireguard endpoints (sing-box >= 1.11)
-ORDER_TAGS = []    # tags in subscription order (proxies + endpoints mixed)
+OUTBOUNDS = []
+ENDPOINTS = []
+ORDER_TAGS = []
 _USED_TAGS = set()
+EXTRAS = {}  # tag -> Xray-only link parameters (see the header)
+# The TUN's name: the kill switch (virtualprivatenetwork.sh) lets it through.
+TUN_NAME = "ii-tun"
 
 UTLS_FP = {
-    "chrome", "firefox", "safari", "edge", "ios", "android",
-    "random", "randomized", "360", "qq",
+    "chrome",
+    "firefox",
+    "safari",
+    "edge",
+    "ios",
+    "android",
+    "random",
+    "randomized",
+    "360",
+    "qq",
 }
 
 
@@ -48,6 +66,19 @@ def add_outbound(ob):
     ORDER_TAGS.append(ob["tag"])
 
 
+def remember_extras(tag, q):
+    """Xray-only parameters of a share link (sing-box drops them)."""
+    e = {}
+    if q.get("spx"):
+        e["spiderX"] = q["spx"]
+    if q.get("authority"):
+        e["authority"] = q["authority"]
+    if q.get("mode", "").lower() == "multi" and q.get("type", "").lower() == "grpc":
+        e["multiMode"] = True
+    if e:
+        EXTRAS[tag] = e
+
+
 def add_endpoint(ep):
     if not isinstance(ep, dict):
         return
@@ -67,9 +98,6 @@ def b64_decode_loose(s):
 
 
 def try_b64_text(s):
-    """Throne's DecodeB64IfValid + v2rayNG-style binary guard: only treat as
-    base64 when it both looks like base64 and decodes to something that
-    resembles subscription content."""
     s2 = (s or "").strip()
     if len(s2) < 8:
         return None
@@ -81,8 +109,6 @@ def try_b64_text(s):
         return None
     if not txt or not txt.strip():
         return None
-    # Some subscription endpoints serve base64-encoded compressed blobs that
-    # decode to mostly-binary garbage. Reject them before they get dispatched.
     printable = sum(1 for c in txt if c.isprintable() or c in "\n\r\t")
     if printable / max(len(txt), 1) < 0.9:
         return None
@@ -102,6 +128,69 @@ def as_bool(v):
     return str(v).strip().lower() in ("1", "true", "yes")
 
 
+def as_list(v):
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [x for x in v if x not in (None, "")]
+    if isinstance(v, str):
+        return [v] if v.strip() else []
+    return [v]
+
+
+def mbps_value(v):
+    if v in (None, ""):
+        return None
+    if isinstance(v, (int, float)):
+        return int(v) if v > 0 else None
+    s = str(v).strip().lower()
+    m = re.search(r"([0-9]+(?:\.[0-9]+)?)", s)
+    if not m:
+        return None
+    n = float(m.group(1))
+    if "gbps" in s or "gbit" in s or re.search(r"\bg\b", s):
+        n *= 1000
+    return int(n) if n > 0 else None
+
+
+def hysteria_bandwidth(settings, hysteria):
+    sources = [settings, hysteria]
+    for src in sources:
+        if not isinstance(src, dict):
+            continue
+        up = mbps_value(src.get("up_mbps") or src.get("upMbps") or src.get("upmbps"))
+        down = mbps_value(
+            src.get("down_mbps") or src.get("downMbps") or src.get("downmbps")
+        )
+        if up or down:
+            return up, down
+        bandwidth = src.get("bandwidth")
+        if isinstance(bandwidth, dict):
+            up = mbps_value(bandwidth.get("up") or bandwidth.get("upload"))
+            down = mbps_value(bandwidth.get("down") or bandwidth.get("download"))
+            if up or down:
+                return up, down
+    return None, None
+
+
+def apply_hysteria2_tuning(ob, settings=None, hysteria=None, stream=None):
+    settings = settings or {}
+    hysteria = hysteria or {}
+    stream = stream or {}
+
+    # (The user's own speeds, if set, override these in routing.py.)
+    up, down = hysteria_bandwidth(settings, hysteria)
+    if up:
+        ob["up_mbps"] = up
+    if down:
+        ob["down_mbps"] = down
+
+    finalmask = stream.get("finalmask") if isinstance(stream, dict) else None
+    quic = finalmask.get("quicParams", {}) if isinstance(finalmask, dict) else {}
+    if quic.get("debug") is True:
+        ob["brutal_debug"] = True
+
+
 def split_alpn(v):
     if not v:
         return None
@@ -109,12 +198,17 @@ def split_alpn(v):
     return parts or None
 
 
-def build_tls(security, sni="", fp="", alpn="", pbk="", sid="",
-              insecure=False, host=""):
+def build_tls(
+    security, sni="", fp="", alpn="", pbk="", sid="", insecure=False, host=""
+):
     security = (security or "").lower()
     server_name = sni or host
-    if security not in ("tls", "reality", "xtls") and not server_name \
-            and not pbk and not insecure:
+    if (
+        security not in ("tls", "reality", "xtls")
+        and not server_name
+        and not pbk
+        and not insecure
+    ):
         return None
     tls = {"enabled": True}
     if server_name:
@@ -135,7 +229,7 @@ def build_tls(security, sni="", fp="", alpn="", pbk="", sid="",
             reality["public_key"] = pbk
         reality["short_id"] = sid or ""
         tls["reality"] = reality
-        if "utls" not in tls:  # REALITY requires uTLS
+        if "utls" not in tls:
             tls["utls"] = {"enabled": True, "fingerprint": "chrome"}
     return tls
 
@@ -145,10 +239,9 @@ def build_transport(net, q, host_header=""):
     path = q.get("path", "") or "/"
     host = host_header or q.get("host", "")
     if net in ("ws", "websocket"):
-        t = {"type": "websocket", "path": path}
+        t = {"type": "ws", "path": path}
         if host:
             t["headers"] = {"Host": host}
-        ed = q.get("ed") or q.get("eh")
         try:
             if q.get("ed"):
                 t["max_early_data"] = int(q.get("ed"))
@@ -157,18 +250,18 @@ def build_transport(net, q, host_header=""):
             pass
         return t
     if net == "grpc":
-        return {"type": "grpc",
-                "service_name": q.get("servicename") or q.get("path", "")}
+        return {
+            "type": "grpc",
+            "service_name": q.get("servicename") or q.get("path", ""),
+        }
     if net == "httpupgrade":
         t = {"type": "httpupgrade", "path": path}
         if host:
             t["host"] = host
         return t
     if net in ("xhttp", "splithttp"):
-        # XHTTP (xray-core names it `splithttp`, v2rayNG emits it the same way)
-        # is a sing-box 1.11+ transport that splits traffic over plain HTTP/1.1
-        # to defeat pattern-based DPI. Query keys follow the xray spec:
-        #   path, host, mode (auto | packet-up | stream-up | stream-one).
+        # XHTTP (xray-core's `splithttp`) has no sing-box transport: such a
+        # node is moved to Xray by xray_split.py, which reads this.
         t = {"type": "xhttp"}
         if path and path != "/":
             t["path"] = path
@@ -185,7 +278,7 @@ def build_transport(net, q, host_header=""):
         if host:
             t["host"] = [h for h in host.split(",") if h]
         return t
-    return None  # tcp / raw => no transport
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +291,10 @@ def parse_vless(line):
     port = int(u.port or 443)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "vless", "tag": tag, "server": host, "server_port": port,
+        "type": "vless",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
         "uuid": urllib.parse.unquote(u.username or ""),
         "packet_encoding": q.get("packetencoding", "xudp"),
     }
@@ -210,18 +306,23 @@ def parse_vless(line):
     if sec in ("tls", "reality", "xtls"):
         ob["tls"] = build_tls(
             "reality" if sec == "reality" else "tls",
-            q.get("sni", ""), q.get("fp", ""), q.get("alpn", ""),
-            q.get("pbk", ""), q.get("sid", ""),
+            q.get("sni", ""),
+            q.get("fp", ""),
+            q.get("alpn", ""),
+            q.get("pbk", ""),
+            q.get("sid", ""),
             as_bool(q.get("allowinsecure", q.get("insecure", "0"))),
-            q.get("host", ""))
+            q.get("host", ""),
+        )
     tr = build_transport(net, q)
     if tr:
         ob["transport"] = tr
     add_outbound(ob)
+    remember_extras(ob["tag"], q)
 
 
 def parse_vmess(line):
-    body = line[len("vmess://"):]
+    body = line[len("vmess://") :]
     txt = None
     try:
         txt = b64_decode_loose(body).decode("utf-8")
@@ -232,7 +333,9 @@ def parse_vmess(line):
     d = json.loads(txt)
     host = d.get("add", "")
     ob = {
-        "type": "vmess", "tag": d.get("ps") or host, "server": host,
+        "type": "vmess",
+        "tag": d.get("ps") or host,
+        "server": host,
         "server_port": int(d.get("port", 443) or 443),
         "uuid": d.get("id", ""),
         "security": d.get("scy") or "auto",
@@ -242,15 +345,23 @@ def parse_vmess(line):
     net = str(d.get("net", "tcp")).lower()
     tls_field = str(d.get("tls", "")).lower()
     if tls_field in ("tls", "reality"):
-        ob["tls"] = build_tls(tls_field, d.get("sni") or d.get("host", ""),
-                              d.get("fp", ""), d.get("alpn", ""),
-                              host=d.get("host", ""))
+        ob["tls"] = build_tls(
+            tls_field,
+            d.get("sni") or d.get("host", ""),
+            d.get("fp", ""),
+            d.get("alpn", ""),
+            host=d.get("host", ""),
+        )
     host_hdr = d.get("host", "")
     tr = build_transport(
         net,
-        {"path": d.get("path", "/"), "host": host_hdr,
-         "servicename": d.get("path", "")},
-        host_hdr)
+        {
+            "path": d.get("path", "/"),
+            "host": host_hdr,
+            "servicename": d.get("path", ""),
+        },
+        host_hdr,
+    )
     if tr:
         ob["transport"] = tr
     add_outbound(ob)
@@ -263,21 +374,29 @@ def parse_trojan(line):
     port = int(u.port or 443)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "trojan", "tag": tag, "server": host, "server_port": port,
+        "type": "trojan",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
         "password": urllib.parse.unquote(u.username or ""),
     }
     sec = q.get("security", "tls").lower()
     if sec in ("tls", "reality", "xtls"):
         ob["tls"] = build_tls(
             "reality" if sec == "reality" else "tls",
-            q.get("sni", ""), q.get("fp", ""), q.get("alpn", ""),
-            q.get("pbk", ""), q.get("sid", ""),
+            q.get("sni", ""),
+            q.get("fp", ""),
+            q.get("alpn", ""),
+            q.get("pbk", ""),
+            q.get("sid", ""),
             as_bool(q.get("allowinsecure", q.get("insecure", "0"))),
-            q.get("host", ""))
+            q.get("host", ""),
+        )
     tr = build_transport(q.get("type", "tcp").lower(), q)
     if tr:
         ob["transport"] = tr
     add_outbound(ob)
+    remember_extras(ob["tag"], q)
 
 
 def parse_hysteria2(line):
@@ -287,13 +406,24 @@ def parse_hysteria2(line):
     port = int(u.port or 443)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "hysteria2", "tag": tag, "server": host, "server_port": port,
+        "type": "hysteria2",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
         "password": urllib.parse.unquote(u.username or ""),
     }
     obfs = q.get("obfs", "")
     if obfs:
-        ob["obfs"] = {"type": obfs,
-                      "password": q.get("obfs-password", q.get("obfspassword", ""))}
+        ob["obfs"] = {
+            "type": obfs,
+            "password": q.get("obfs-password", q.get("obfspassword", "")),
+        }
+    up = mbps_value(q.get("upmbps") or q.get("up_mbps") or q.get("up"))
+    down = mbps_value(q.get("downmbps") or q.get("down_mbps") or q.get("down"))
+    if up:
+        ob["up_mbps"] = up
+    if down:
+        ob["down_mbps"] = down
     tls = {"enabled": True, "server_name": q.get("sni", host)}
     if as_bool(q.get("insecure", "0")):
         tls["insecure"] = True
@@ -301,6 +431,7 @@ def parse_hysteria2(line):
     if alpn:
         tls["alpn"] = alpn
     ob["tls"] = tls
+    apply_hysteria2_tuning(ob)
     add_outbound(ob)
 
 
@@ -311,7 +442,10 @@ def parse_hysteria1(line):
     port = int(u.port or 443)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "hysteria", "tag": tag, "server": host, "server_port": port,
+        "type": "hysteria",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
     }
     auth = q.get("auth", q.get("auth_str", q.get("authstr", "")))
     if auth:
@@ -326,8 +460,7 @@ def parse_hysteria1(line):
     obfs = q.get("obfs", q.get("obfsparam", ""))
     if obfs:
         ob["obfs"] = obfs
-    tls = {"enabled": True,
-           "server_name": q.get("peer", q.get("sni", host))}
+    tls = {"enabled": True, "server_name": q.get("peer", q.get("sni", host))}
     if as_bool(q.get("insecure", "0")):
         tls["insecure"] = True
     alpn = split_alpn(q.get("alpn", ""))
@@ -344,7 +477,10 @@ def parse_tuic(line):
     port = int(u.port or 443)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "tuic", "tag": tag, "server": host, "server_port": port,
+        "type": "tuic",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
         "uuid": urllib.parse.unquote(u.username or ""),
         "password": urllib.parse.unquote(u.password or ""),
     }
@@ -372,7 +508,10 @@ def parse_anytls(line):
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     password = urllib.parse.unquote(u.password or u.username or "")
     ob = {
-        "type": "anytls", "tag": tag, "server": host, "server_port": port,
+        "type": "anytls",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
         "password": password,
     }
     tls = {"enabled": True, "server_name": q.get("sni", host)}
@@ -386,7 +525,7 @@ def parse_anytls(line):
 
 
 def parse_shadowsocks(line):
-    rest = line[len("ss://"):]
+    rest = line[len("ss://") :]
     frag = ""
     if "#" in rest:
         rest, frag = rest.split("#", 1)
@@ -400,7 +539,6 @@ def parse_shadowsocks(line):
     port = 0
     if "@" in rest:
         userinfo, server = rest.rsplit("@", 1)
-        # userinfo may be base64(method:password) or plain method:password
         creds = None
         try:
             dec = b64_decode_loose(userinfo).decode("utf-8")
@@ -415,7 +553,6 @@ def parse_shadowsocks(line):
         host, _, p = server.partition(":")
         port = int(p or 0)
     else:
-        # legacy: whole thing base64(method:password@host:port)
         try:
             dec = b64_decode_loose(rest).decode("utf-8")
         except Exception:
@@ -430,12 +567,15 @@ def parse_shadowsocks(line):
     if not host or not port:
         return
     ob = {
-        "type": "shadowsocks", "tag": tag or host, "server": host,
-        "server_port": port, "method": method, "password": password,
+        "type": "shadowsocks",
+        "tag": tag or host,
+        "server": host,
+        "server_port": port,
+        "method": method,
+        "password": password,
     }
     plugin = q.get("plugin", "")
     if plugin:
-        # plugin string is "name;opt1=val;opt2"
         if ";" in plugin:
             name, opts = plugin.split(";", 1)
         else:
@@ -452,7 +592,10 @@ def parse_socks(line):
     port = int(u.port or 1080)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "socks", "tag": tag, "server": host, "server_port": port,
+        "type": "socks",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
         "version": "5",
     }
     if u.username:
@@ -470,7 +613,10 @@ def parse_http(line):
     port = int(u.port or (443 if u.scheme == "https" else 80))
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "http", "tag": tag, "server": host, "server_port": port,
+        "type": "http",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
     }
     if u.username:
         ob["username"] = urllib.parse.unquote(u.username)
@@ -487,7 +633,10 @@ def parse_ssh(line):
     port = int(u.port or 22)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
     ob = {
-        "type": "ssh", "tag": tag, "server": host, "server_port": port,
+        "type": "ssh",
+        "tag": tag,
+        "server": host,
+        "server_port": port,
     }
     if u.username:
         ob["user"] = urllib.parse.unquote(u.username)
@@ -502,13 +651,20 @@ def parse_wg_link(line):
     host = u.hostname or ""
     port = int(u.port or 51820)
     tag = urllib.parse.unquote(u.fragment) if u.fragment else host
-    priv = (urllib.parse.unquote(u.username) if u.username
-            else q.get("privatekey", q.get("private_key", q.get("secretkey", ""))))
-    pub = q.get("publickey", q.get("public_key", q.get("peer", q.get("peerpublickey", ""))))
+    priv = (
+        urllib.parse.unquote(u.username)
+        if u.username
+        else q.get("privatekey", q.get("private_key", q.get("secretkey", "")))
+    )
+    pub = q.get(
+        "publickey", q.get("public_key", q.get("peer", q.get("peerpublickey", "")))
+    )
     addr = q.get("address", q.get("ip", ""))
     addresses = [a for a in re.split(r"[,\s]+", addr) if a] or ["172.16.0.2/32"]
     peer = {
-        "address": host, "port": port, "public_key": pub,
+        "address": host,
+        "port": port,
+        "public_key": pub,
         "allowed_ips": ["0.0.0.0/0", "::/0"],
     }
     psk = q.get("presharedkey", q.get("pre_shared_key", q.get("psk", "")))
@@ -517,12 +673,17 @@ def parse_wg_link(line):
     reserved = q.get("reserved", "")
     if reserved:
         try:
-            peer["reserved"] = [int(x) for x in re.split(r"[,\s]+", reserved) if x != ""]
+            peer["reserved"] = [
+                int(x) for x in re.split(r"[,\s]+", reserved) if x != ""
+            ]
         except Exception:
             pass
     ep = {
-        "type": "wireguard", "tag": tag, "address": addresses,
-        "private_key": priv, "peers": [peer],
+        "type": "wireguard",
+        "tag": tag,
+        "address": addresses,
+        "private_key": priv,
+        "peers": [peer],
     }
     if q.get("mtu"):
         try:
@@ -532,16 +693,38 @@ def parse_wg_link(line):
     add_endpoint(ep)
 
 
+def dispatch_json_value(j):
+    if isinstance(j, list):
+        for item in j:
+            dispatch_json_value(item)
+        return
+    if not isinstance(j, dict):
+        return
+    if is_xray_group(j):
+        update_xray_group(j)
+        return
+    if "outbounds" in j or "endpoints" in j:
+        update_singbox(j)
+    elif "version" in j and "servers" in j:
+        update_sip008(j)
+    elif "server" in j and "type" in j:
+        parse_singbox_node(j)
+    elif "protocol" in j:
+        parse_xray_outbound(j)
+
+
+def dispatch_json_object(j):
+    dispatch_json_value(j)
+
+
 def parse_json_link(line):
-    """json://<base64url(json)>  (Throne 'json link' format)."""
     u = urllib.parse.urlparse(line)
-    frag = u.fragment or (line[len("json://"):])
+    frag = u.fragment or (line[len("json://") :])
     try:
         data = json.loads(b64_decode_loose(frag).decode("utf-8"))
     except Exception:
         return
-    if isinstance(data, dict):
-        parse_singbox_node(data)
+    dispatch_json_object(data)
 
 
 SHARE_PREFIXES = (
@@ -580,17 +763,28 @@ def parse_share_link(line):
 
 
 # ---------------------------------------------------------------------------
-# sing-box JSON node ingestion (already in sing-box format)
+# sing-box JSON node ingestion
 # ---------------------------------------------------------------------------
 VALID_NODE_TYPES = {
-    "socks", "http", "shadowsocks", "vmess", "vless", "trojan",
-    "anytls", "hysteria", "hysteria2", "tuic", "wireguard", "ssh",
-    "shadowtls", "naive", "tor",
+    "socks",
+    "http",
+    "shadowsocks",
+    "vmess",
+    "vless",
+    "trojan",
+    "anytls",
+    "hysteria",
+    "hysteria2",
+    "tuic",
+    "wireguard",
+    "ssh",
+    "shadowtls",
+    "naive",
+    "tor",
 }
 
 
 def _wg_outbound_to_endpoint(out):
-    """Convert a legacy (<=1.10) WireGuard outbound to a 1.11+ endpoint."""
     ep = {"type": "wireguard", "tag": out.get("tag", "wireguard")}
     addr = out.get("local_address") or out.get("address") or []
     if isinstance(addr, str):
@@ -627,10 +821,8 @@ def parse_singbox_node(out):
     if t not in VALID_NODE_TYPES:
         return
     node = dict(out)
-    # Drop dial fields that were removed/renamed and would taint a clean config.
     node.pop("domain_strategy", None)
     if t == "wireguard":
-        # legacy outbound vs already-endpoint
         if "peers" in node or "address" in node and "server" not in node:
             node["type"] = "wireguard"
             add_endpoint(node)
@@ -641,10 +833,15 @@ def parse_singbox_node(out):
 
 
 def update_singbox(j):
+    remarks = j.get("remarks", "") if isinstance(j, dict) else ""
     for arr in ("outbounds", "endpoints"):
         for item in j.get(arr, []) or []:
-            if isinstance(item, dict):
+            if not isinstance(item, dict):
+                continue
+            if "type" in item:
                 parse_singbox_node(item)
+            elif "protocol" in item:
+                parse_xray_outbound(item, remarks)
 
 
 def update_sip008(j):
@@ -658,8 +855,10 @@ def update_sip008(j):
         ob = {
             "type": "shadowsocks",
             "tag": srv.get("remarks") or srv.get("name") or host,
-            "server": host, "server_port": int(port),
-            "method": srv.get("method", ""), "password": srv.get("password", ""),
+            "server": host,
+            "server_port": int(port),
+            "method": srv.get("method", ""),
+            "password": srv.get("password", ""),
         }
         if srv.get("plugin"):
             ob["plugin"] = srv["plugin"]
@@ -669,7 +868,326 @@ def update_sip008(j):
 
 
 # ---------------------------------------------------------------------------
-# Clash (best-effort, no remote conversion API available)
+# Xray/V2Ray full config ingestion (Happ exports this shape)
+# ---------------------------------------------------------------------------
+def _xray_hysteria_server(settings):
+    server = settings.get("address") or settings.get("server") or ""
+    port = settings.get("port") or settings.get("server_port") or 0
+    servers = settings.get("servers")
+    if (not server or not port) and isinstance(servers, list) and servers:
+        first = servers[0]
+        if isinstance(first, dict):
+            server = server or first.get("address") or first.get("server") or ""
+            port = port or first.get("port") or first.get("server_port") or 0
+    try:
+        port = int(port or 0)
+    except Exception:
+        port = 0
+    return server, port
+
+
+def _xray_vnext_server(settings):
+    vnext = settings.get("vnext")
+    if not isinstance(vnext, list) or not vnext:
+        return "", 0, {}
+    first = vnext[0]
+    if not isinstance(first, dict):
+        return "", 0, {}
+    server = first.get("address") or first.get("server") or ""
+    try:
+        port = int(first.get("port") or first.get("server_port") or 0)
+    except Exception:
+        port = 0
+    users = first.get("users") or []
+    user = (
+        users[0]
+        if isinstance(users, list) and users and isinstance(users[0], dict)
+        else {}
+    )
+    return server, port, user
+
+
+def _xray_stream_tls(stream, server):
+    security = str(stream.get("security", "")).lower()
+    if security == "reality":
+        reality = stream.get("realitySettings", {}) or {}
+        return build_tls(
+            "reality",
+            reality.get("serverName", ""),
+            reality.get("fingerprint", ""),
+            "",
+            reality.get("publicKey", ""),
+            reality.get("shortId", ""),
+            host=server,
+        )
+    if security in ("tls", "xtls"):
+        tls_settings = stream.get("tlsSettings", {}) or {}
+        alpn = tls_settings.get("alpn", "")
+        if isinstance(alpn, list):
+            alpn = ",".join(str(x) for x in alpn if x)
+        return build_tls(
+            "tls",
+            tls_settings.get("serverName", ""),
+            tls_settings.get("fingerprint", ""),
+            alpn,
+            insecure=as_bool(
+                tls_settings.get("allowInsecure", tls_settings.get("insecure", False))
+            ),
+            host=server,
+        )
+    return None
+
+
+def _xray_stream_transport(stream):
+    network = str(stream.get("network", "tcp")).lower()
+    if network == "grpc":
+        grpc = stream.get("grpcSettings", {}) or {}
+        return {"type": "grpc", "service_name": grpc.get("serviceName", "")}
+    if network in ("ws", "websocket"):
+        ws = stream.get("wsSettings", {}) or {}
+        path = ws.get("path", "/")
+        host = ""
+        headers = ws.get("headers", {}) or {}
+        for k, v in headers.items():
+            if str(k).lower() == "host":
+                host = v
+        tr = {"type": "ws", "path": path}
+        if host:
+            tr["headers"] = {"Host": host}
+        return tr
+    if network in ("xhttp", "splithttp"):
+        xh = stream.get("xhttpSettings") or stream.get("splithttpSettings") or {}
+        tr = {"type": "xhttp"}
+        if xh.get("path") and xh.get("path") != "/":
+            tr["path"] = xh["path"]
+        if xh.get("host"):
+            tr["host"] = xh["host"] if isinstance(xh["host"], list) else [xh["host"]]
+        if xh.get("mode") in ("auto", "packet-up", "stream-up", "stream-one"):
+            tr["mode"] = xh["mode"]
+        return tr
+    if network in ("h2", "http"):
+        http = stream.get("httpSettings", {}) or {}
+        tr = {}
+        tr["type"] = "http"
+        path = http.get("path", "")
+        host = http.get("host", "")
+        if path:
+            tr["path"] = path
+        if host:
+            tr["host"] = host if isinstance(host, list) else [host]
+        return tr
+    return None
+
+
+def parse_xray_vless(out, remarks=""):
+    settings = out.get("settings", {}) or {}
+    stream = out.get("streamSettings", {}) or {}
+    server, port, user = _xray_vnext_server(settings)
+    if not server or not port or not user.get("id"):
+        return
+    ob = {
+        "type": "vless",
+        "tag": remarks or out.get("remarks") or out.get("tag") or server,
+        "server": server,
+        "server_port": port,
+        "uuid": user.get("id", ""),
+        "packet_encoding": "xudp",
+    }
+    flow = user.get("flow", "")
+    network = str(stream.get("network", "tcp")).lower()
+    if flow and network in ("tcp", "raw", ""):
+        ob["flow"] = flow
+    tls = _xray_stream_tls(stream, server)
+    if tls:
+        ob["tls"] = tls
+    tr = _xray_stream_transport(stream)
+    if tr:
+        ob["transport"] = tr
+    add_outbound(ob)
+
+
+def parse_xray_outbound(out, remarks=""):
+    if not isinstance(out, dict):
+        return
+    protocol = str(out.get("protocol", "")).lower()
+    if protocol == "vless":
+        parse_xray_vless(out, remarks)
+        return
+    if protocol not in ("hysteria", "hysteria2", "hy2"):
+        return
+
+    settings = out.get("settings", {}) or {}
+    stream = out.get("streamSettings", {}) or {}
+    hysteria = stream.get("hysteriaSettings", {}) or {}
+    tls_settings = stream.get("tlsSettings", {}) or {}
+
+    server, port = _xray_hysteria_server(settings)
+    if not server or not port:
+        return
+
+    version = settings.get(
+        "version", hysteria.get("version", 2 if protocol in ("hysteria2", "hy2") else 1)
+    )
+    try:
+        version = int(version or 1)
+    except Exception:
+        version = 1
+
+    tag = remarks or out.get("remarks") or out.get("tag") or server
+    security = str(stream.get("security", "tls")).lower()
+    sni = tls_settings.get("serverName") or tls_settings.get("server_name") or server
+    alpn = tls_settings.get("alpn", "")
+    if isinstance(alpn, list):
+        alpn = ",".join(str(x) for x in alpn if x)
+    tls = build_tls(
+        "tls" if security in ("", "tls") else security,
+        sni,
+        "",
+        alpn,
+        insecure=as_bool(
+            tls_settings.get("allowInsecure", tls_settings.get("insecure", False))
+        ),
+        host=server,
+    )
+
+    if version == 2:
+        ob = {
+            "type": "hysteria2",
+            "tag": tag,
+            "server": server,
+            "server_port": port,
+            "password": hysteria.get("auth")
+            or settings.get("password")
+            or settings.get("auth")
+            or "",
+        }
+        obfs = hysteria.get("obfs") or settings.get("obfs") or ""
+        obfs_password = (
+            hysteria.get("obfsPassword")
+            or hysteria.get("obfs-password")
+            or settings.get("obfsPassword")
+            or settings.get("obfs-password")
+            or ""
+        )
+        if obfs:
+            ob["obfs"] = {"type": obfs, "password": obfs_password}
+    else:
+        ob = {
+            "type": "hysteria",
+            "tag": tag,
+            "server": server,
+            "server_port": port,
+        }
+        auth = (
+            hysteria.get("auth")
+            or settings.get("auth")
+            or settings.get("auth_str")
+            or ""
+        )
+        if auth:
+            ob["auth_str"] = auth
+        obfs = hysteria.get("obfs") or settings.get("obfs") or ""
+        if obfs:
+            ob["obfs"] = obfs
+
+    if tls:
+        ob["tls"] = tls
+    if ob.get("type") == "hysteria2":
+        apply_hysteria2_tuning(ob, settings, hysteria, stream)
+    add_outbound(ob)
+
+
+# ---------------------------------------------------------------------------
+# Xray "Auto Selector" groups: a full Xray config whose routing.balancers
+# pick among several proxy outbounds. Throne represents these as a single
+# auto-selecting node; we mirror that with a sing-box urltest group instead
+# of flattening every member into a separate top-level proxy.
+# ---------------------------------------------------------------------------
+def is_xray_group(j):
+    if not isinstance(j, dict):
+        return False
+    routing = j.get("routing") or {}
+    balancers = routing.get("balancers") if isinstance(routing, dict) else None
+    return isinstance(balancers, list) and len(balancers) > 0
+
+
+def _xray_selector_prefixes(j):
+    prefixes = []
+    routing = j.get("routing") or {}
+    for b in as_list(routing.get("balancers")):
+        if isinstance(b, dict):
+            for s in as_list(b.get("selector")):
+                prefixes.append(str(s))
+    obs = j.get("burstObservatory") or j.get("observatory") or {}
+    if isinstance(obs, dict):
+        for s in as_list(obs.get("subjectSelector")):
+            prefixes.append(str(s))
+    return prefixes
+
+
+def _xray_member_host(item):
+    proto = str(item.get("protocol", "")).lower()
+    settings = item.get("settings", {}) or {}
+    if proto == "vless":
+        server, _port, _user = _xray_vnext_server(settings)
+        return server
+    if proto in ("hysteria", "hysteria2", "hy2"):
+        server, _port = _xray_hysteria_server(settings)
+        return server
+    return ""
+
+
+def _xray_group_interval(j):
+    obs = j.get("burstObservatory") or j.get("observatory") or {}
+    ping = obs.get("pingConfig", {}) if isinstance(obs, dict) else {}
+    interval = ping.get("interval") if isinstance(ping, dict) else None
+    return interval if isinstance(interval, str) and interval.strip() else "3m"
+
+
+def update_xray_group(j):
+    remarks = j.get("remarks", "") or "Auto Selector"
+    prefixes = _xray_selector_prefixes(j)
+    outbounds = j.get("outbounds", []) or []
+
+    member_tags = []
+    for item in outbounds:
+        if not isinstance(item, dict):
+            continue
+        proto = str(item.get("protocol", "")).lower()
+        if proto not in ("vless", "hysteria", "hysteria2", "hy2"):
+            continue
+        tag = str(item.get("tag", ""))
+        if prefixes and not any(tag.startswith(p) for p in prefixes):
+            continue
+        host = _xray_member_host(item)
+        member_name = "%s · %s" % (remarks, host) if host else remarks
+        before = len(OUTBOUNDS)
+        parse_xray_outbound(item, member_name)
+        if len(OUTBOUNDS) > before:
+            member_tags.append(OUTBOUNDS[-1]["tag"])
+
+    if not member_tags:
+        return
+
+    # Members are reachable only through the group, not as standalone picks.
+    for t in member_tags:
+        if t in ORDER_TAGS:
+            ORDER_TAGS.remove(t)
+
+    group = {
+        "type": "urltest",
+        "tag": _uniq_tag(remarks),
+        "outbounds": member_tags,
+        "url": "https://www.gstatic.com/generate_204",
+        "interval": _xray_group_interval(j),
+        "tolerance": 50,
+    }
+    OUTBOUNDS.append(group)
+    ORDER_TAGS.append(group["tag"])
+
+
+# ---------------------------------------------------------------------------
+# Clash
 # ---------------------------------------------------------------------------
 def _clash_node_to_singbox(p):
     if not isinstance(p, dict):
@@ -693,18 +1211,25 @@ def _clash_node_to_singbox(p):
             for k, v in hdr.items():
                 if k.lower() == "host":
                     host = v
-            ob["transport"] = {"type": "websocket", "path": path}
+            ob["transport"] = {"type": "ws", "path": path}
             if host:
                 ob["transport"]["headers"] = {"Host": host}
         elif net == "grpc":
             gopts = p.get("grpc-opts", {}) or {}
-            ob["transport"] = {"type": "grpc",
-                               "service_name": gopts.get("grpc-service-name", "")}
+            ob["transport"] = {
+                "type": "grpc",
+                "service_name": gopts.get("grpc-service-name", ""),
+            }
 
     if t == "ss":
-        ob = {"type": "shadowsocks", "tag": name, "server": server,
-              "server_port": port, "method": p.get("cipher", ""),
-              "password": p.get("password", "")}
+        ob = {
+            "type": "shadowsocks",
+            "tag": name,
+            "server": server,
+            "server_port": port,
+            "method": p.get("cipher", ""),
+            "password": p.get("password", ""),
+        }
         if p.get("plugin"):
             ob["plugin"] = p["plugin"]
             popts = p.get("plugin-opts", {}) or {}
@@ -712,9 +1237,16 @@ def _clash_node_to_singbox(p):
                 ob["plugin_opts"] = ";".join("%s=%s" % (k, v) for k, v in popts.items())
         add_outbound(ob)
     elif t == "vmess":
-        ob = {"type": "vmess", "tag": name, "server": server, "server_port": port,
-              "uuid": p.get("uuid", ""), "alter_id": int(p.get("alterId", 0) or 0),
-              "security": p.get("cipher", "auto"), "packet_encoding": "xudp"}
+        ob = {
+            "type": "vmess",
+            "tag": name,
+            "server": server,
+            "server_port": port,
+            "uuid": p.get("uuid", ""),
+            "alter_id": int(p.get("alterId", 0) or 0),
+            "security": p.get("cipher", "auto"),
+            "packet_encoding": "xudp",
+        }
         if as_bool(p.get("tls", False)):
             ob["tls"] = {"enabled": True, "server_name": sni or server}
             if insecure:
@@ -722,31 +1254,62 @@ def _clash_node_to_singbox(p):
         ws_grpc(ob)
         add_outbound(ob)
     elif t == "vless":
-        ob = {"type": "vless", "tag": name, "server": server, "server_port": port,
-              "uuid": p.get("uuid", ""), "packet_encoding": "xudp"}
+        ob = {
+            "type": "vless",
+            "tag": name,
+            "server": server,
+            "server_port": port,
+            "uuid": p.get("uuid", ""),
+            "packet_encoding": "xudp",
+        }
         if p.get("flow"):
             ob["flow"] = p["flow"]
         reality = p.get("reality-opts", {}) or {}
         if reality:
-            ob["tls"] = build_tls("reality", sni, p.get("client-fingerprint", ""),
-                                  "", reality.get("public-key", ""),
-                                  reality.get("short-id", ""), insecure, server)
+            ob["tls"] = build_tls(
+                "reality",
+                sni,
+                p.get("client-fingerprint", ""),
+                "",
+                reality.get("public-key", ""),
+                reality.get("short-id", ""),
+                insecure,
+                server,
+            )
         elif as_bool(p.get("tls", False)):
-            ob["tls"] = build_tls("tls", sni, p.get("client-fingerprint", ""),
-                                  "", "", "", insecure, server)
+            ob["tls"] = build_tls(
+                "tls",
+                sni,
+                p.get("client-fingerprint", ""),
+                "",
+                "",
+                "",
+                insecure,
+                server,
+            )
         ws_grpc(ob)
         add_outbound(ob)
     elif t == "trojan":
-        ob = {"type": "trojan", "tag": name, "server": server, "server_port": port,
-              "password": p.get("password", "")}
+        ob = {
+            "type": "trojan",
+            "tag": name,
+            "server": server,
+            "server_port": port,
+            "password": p.get("password", ""),
+        }
         ob["tls"] = {"enabled": True, "server_name": sni or server}
         if insecure:
             ob["tls"]["insecure"] = True
         ws_grpc(ob)
         add_outbound(ob)
     elif t in ("hysteria2", "hy2"):
-        ob = {"type": "hysteria2", "tag": name, "server": server,
-              "server_port": port, "password": p.get("password", "")}
+        ob = {
+            "type": "hysteria2",
+            "tag": name,
+            "server": server,
+            "server_port": port,
+            "password": p.get("password", ""),
+        }
         ob["tls"] = {"enabled": True, "server_name": sni or server}
         if insecure:
             ob["tls"]["insecure"] = True
@@ -754,8 +1317,14 @@ def _clash_node_to_singbox(p):
             ob["obfs"] = {"type": p["obfs"], "password": p.get("obfs-password", "")}
         add_outbound(ob)
     elif t == "tuic":
-        ob = {"type": "tuic", "tag": name, "server": server, "server_port": port,
-              "uuid": p.get("uuid", ""), "password": p.get("password", "")}
+        ob = {
+            "type": "tuic",
+            "tag": name,
+            "server": server,
+            "server_port": port,
+            "uuid": p.get("uuid", ""),
+            "password": p.get("password", ""),
+        }
         if p.get("congestion-controller"):
             ob["congestion_control"] = p["congestion-controller"]
         if p.get("udp-relay-mode"):
@@ -765,8 +1334,13 @@ def _clash_node_to_singbox(p):
             ob["tls"]["insecure"] = True
         add_outbound(ob)
     elif t in ("socks5", "socks"):
-        ob = {"type": "socks", "tag": name, "server": server, "server_port": port,
-              "version": "5"}
+        ob = {
+            "type": "socks",
+            "tag": name,
+            "server": server,
+            "server_port": port,
+            "version": "5",
+        }
         if p.get("username"):
             ob["username"] = p["username"]
         if p.get("password"):
@@ -786,7 +1360,8 @@ def _clash_node_to_singbox(p):
 def update_clash(text):
     nodes = None
     try:
-        import yaml  # PyYAML if present -> full fidelity
+        import yaml
+
         data = yaml.safe_load(text)
         if isinstance(data, dict):
             nodes = data.get("proxies")
@@ -802,15 +1377,12 @@ def update_clash(text):
 
 
 def _clash_proxies_fallback(text):
-    """Tolerant parser for the `proxies:` list when PyYAML is unavailable.
-    Handles inline flow maps `- {a: b}` and block maps with nested mappings
-    (e.g. ws-opts / headers / reality-opts) via an indentation stack."""
     lines = text.splitlines()
     out = []
     in_proxies = False
-    cur = None            # current proxy dict
-    item_indent = None    # indent of the `- ` marker
-    stack = []            # list of (indent, container_dict)
+    cur = None
+    item_indent = None
+    stack = []
 
     def flush():
         if cur is not None:
@@ -827,7 +1399,6 @@ def _clash_proxies_fallback(text):
         indent = len(raw) - len(raw.lstrip(" "))
         stripped = raw.strip()
 
-        # End of the proxies block: a new top-level section.
         if indent == 0 and not stripped.startswith("-") and stripped.endswith(":"):
             break
 
@@ -850,7 +1421,6 @@ def _clash_proxies_fallback(text):
 
         if cur is None:
             continue
-        # Pop deeper scopes that we have dedented out of.
         while len(stack) > 1 and indent < stack[-1][0]:
             stack.pop()
         k, sep, v = stripped.partition(":")
@@ -861,13 +1431,11 @@ def _clash_proxies_fallback(text):
 
 
 def _assign(stack, indent, key, value):
-    # Find the container whose child-indent matches this line's indent.
     container = stack[-1][1]
     for ind, cont in stack:
         if indent >= ind:
             container = cont
     if value == "":
-        # Opens a nested mapping.
         child = {}
         container[key] = child
         stack.append((indent + 2, child))
@@ -889,8 +1457,9 @@ def _yaml_scalar(v):
             return int(v)
         except Exception:
             return v
-    if (v.startswith('"') and v.endswith('"')) or \
-       (v.startswith("'") and v.endswith("'")):
+    if (v.startswith('"') and v.endswith('"')) or (
+        v.startswith("'") and v.endswith("'")
+    ):
         return v[1:-1]
     return v
 
@@ -950,19 +1519,29 @@ def parse_wg_file(text):
         (iface if section == "i" else peer)[k] = v
     if not iface.get("privatekey") or not peer.get("publickey"):
         return
-    addr = [a for a in re.split(r"[,\s]+", iface.get("address", "")) if a] or ["172.16.0.2/32"]
+    addr = [a for a in re.split(r"[,\s]+", iface.get("address", "")) if a] or [
+        "172.16.0.2/32"
+    ]
     endpoint = peer.get("endpoint", "")
     host, _, p = endpoint.partition(":")
     pr = {
-        "address": host or endpoint, "port": int(p or 51820),
+        "address": host or endpoint,
+        "port": int(p or 51820),
         "public_key": peer.get("publickey", ""),
-        "allowed_ips": [a for a in re.split(r"[,\s]+", peer.get("allowedips", "0.0.0.0/0,::/0")) if a],
+        "allowed_ips": [
+            a
+            for a in re.split(r"[,\s]+", peer.get("allowedips", "0.0.0.0/0,::/0"))
+            if a
+        ],
     }
     if peer.get("presharedkey"):
         pr["pre_shared_key"] = peer["presharedkey"]
     ep = {
-        "type": "wireguard", "tag": host or "wireguard",
-        "address": addr, "private_key": iface["privatekey"], "peers": [pr],
+        "type": "wireguard",
+        "tag": host or "wireguard",
+        "address": addr,
+        "private_key": iface["privatekey"],
+        "peers": [pr],
     }
     if iface.get("mtu"):
         try:
@@ -1000,7 +1579,7 @@ def disect(s):
             end = json_end_idx(s, idx)
             if end == -1:
                 return res
-            res.append(s[idx:end + 1])
+            res.append(s[idx : end + 1])
             idx = end + 1
             continue
         nl = s.find("\n", idx)
@@ -1016,7 +1595,6 @@ def update(text, need_parse=True):
         return
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    # 1) whole-content base64
     dec = try_b64_text(text)
     if dec is not None:
         update(dec)
@@ -1024,90 +1602,69 @@ def update(text, need_parse=True):
 
     stripped = text.strip()
 
-    # 2) JSON (sing-box / SIP008 / single object)
     try:
         j = json.loads(stripped)
     except Exception:
         j = None
-    if isinstance(j, dict):
-        if "outbounds" in j or "endpoints" in j:
-            update_singbox(j)
-            return
-        if "version" in j and "servers" in j:
-            update_sip008(j)
-            return
-        if "server" in j and "type" in j:
-            parse_singbox_node(j)
-            return
+    if isinstance(j, (dict, list)):
+        dispatch_json_value(j)
         return
 
-    # 3) Clash
     if re.search(r"(^|\n)\s*proxies\s*:", text):
         update_clash(text)
         return
 
-    # 4) WireGuard file
     if "[Interface]" in text and "[Peer]" in text:
         parse_wg_file(text)
         return
 
-    # 5) multi-line -> Disect, recurse
     if need_parse and "\n" in text:
         for part in disect(text):
             update(part.strip(), False)
         return
 
-    # 6) comments / too short
     if stripped.startswith("//") or stripped.startswith("#") or len(stripped) < 2:
         return
 
-    # 7) json:// link
     if stripped.startswith("json://"):
         parse_json_link(stripped)
         return
 
-    # 8) bare JSON object
     if stripped.startswith("{"):
         try:
             obj = json.loads(stripped)
         except Exception:
             return
         if isinstance(obj, dict):
-            if "outbounds" in obj or "endpoints" in obj:
-                update_singbox(obj)
-            elif "server" in obj:
-                parse_singbox_node(obj)
+            dispatch_json_object(obj)
         return
 
-    # 9) share link
     parse_share_link(stripped)
 
 
 # ---------------------------------------------------------------------------
-# Config builder (sing-box 1.13.x schema)
+# Config builder (sing-box 1.14 schema)
 # ---------------------------------------------------------------------------
 def build_config():
-    # Селектор со всеми спаршенными узлами
+    proxy_members = list(ORDER_TAGS)
     selector = {
         "type": "selector",
         "tag": "proxy",
-        "outbounds": list(ORDER_TAGS),
-        "default": ORDER_TAGS[0] if ORDER_TAGS else ""
+        "outbounds": proxy_members,
+        "default": proxy_members[0] if proxy_members else "",
     }
 
-    # Собираем домены всех прокси-узлов, чтобы пустить их DNS-запросы напрямую
     server_domains = []
     for ob in OUTBOUNDS:
         srv = ob.get("server", "")
-        # Проверяем, что это строка и она не является чистым IP-адресом
-        if srv and isinstance(srv, str) and not re.match(r'^[\d\.:]+$', srv):
+        if srv and isinstance(srv, str) and not re.match(r"^[\d\.:]+$", srv):
             if srv not in server_domains:
                 server_domains.append(srv)
 
     for ep in ENDPOINTS:
         for peer in ep.get("peers", []):
             addr = peer.get("address", "")
-            if addr and isinstance(addr, str) and not re.match(r'^[\d\.:]+$', addr):
+            if addr and isinstance(addr, str) and not re.match(r"^[\d\.:]+$", addr):
                 if addr not in server_domains:
                     server_domains.append(addr)
 
@@ -1117,135 +1674,93 @@ def build_config():
             "answer": "localhost. IN A 127.0.0.1",
             "domain": "localhost",
             "query_type": "A",
-            "rcode": "NOERROR"
+            "rcode": "NOERROR",
         },
         {
             "action": "predefined",
             "answer": "localhost. IN AAAA ::1",
             "domain": "localhost",
             "query_type": "AAAA",
-            "rcode": "NOERROR"
-        }
+            "rcode": "NOERROR",
+        },
     ]
 
-    # Маршрутизируем домены прокси-серверов напрямую (как в Throne)
+    # The proxy servers' own names resolve direct: reaching a node must not
+    # need the node.
     if server_domains:
-        dns_rules.append({
-            "action": "route",
-            "domain": server_domains,
-            "domain_keyword": [],
-            "domain_regex": [],
-            "domain_suffix": [],
-            "rule_set": [],
-            "server": "dns-direct",
-            "strategy": ""
-        })
+        dns_rules.append(
+            {"action": "route", "domain": server_domains, "server": "dns-direct"}
+        )
 
-    # Catch-all правило для dns-direct
-    dns_rules.append({
-        "action": "route",
-        "server": "dns-direct",
-        "strategy": ""
-    })
+    # Catch-all (routing.py points it where unmatched traffic goes and puts
+    # its own rules in front of it).
+    dns_rules.append({"action": "route", "server": "dns-remote"})
+
+    dns_servers = [
+        {
+            # DoH (port 443) rather than DoT (port 853): some proxy servers
+            # (e.g. grpc-reality nodes) block outbound 853, which breaks all
+            # DNS when FakeIP is off since every query is tunneled through the
+            # selected proxy. 443 is universally allowed and harder to block.
+            "detour": "proxy",
+            "domain_resolver": "dns-direct",
+            "server": "8.8.8.8",
+            "tag": "dns-remote",
+            "type": "https",
+        },
+        {"tag": "dns-direct", "type": "local"},
+        {"tag": "dns-local", "type": "local"},
+    ]
 
     cfg = {
-        "certificate": {
-            "store": "system"
-        },
+        "certificate": {"store": "system"},
         "dns": {
+            "final": "dns-remote",
+            "strategy": "prefer_ipv4",
             "rules": dns_rules,
-            "servers": [
-                {
-                    "detour": "proxy",
-                    "domain_resolver": "dns-local",
-                    "server": "8.8.8.8",
-                    "tag": "dns-remote",
-                    "type": "tls"
-                },
-                {
-                    "domain_resolver": "dns-local",
-                    "tag": "dns-direct",
-                    "type": "local"
-                },
-                {
-                    "tag": "dns-local",
-                    "type": "local"
-                }
-            ]
+            "servers": dns_servers,
         },
         "endpoints": ENDPOINTS,
         "experimental": {
-            "cache_file": {
-                "enabled": True,
-                "store_fakeip": True,
-                "store_rdrc": True
-            },
-            "clash_api": {
-                "default_mode": ""
-            }
+            # No clash_api: an API on a local port without a secret lets any
+            # local program (or web page) switch nodes and watch connections.
+            "cache_file": {"enabled": True, "store_fakeip": True, "store_dns": True},
         },
+        # TUN only: a local mixed / DNS port without a password lets any
+        # program on the machine ride the tunnel and learn the server's
+        # address; TUN's hijack-dns already takes all DNS.
         "inbounds": [
             {
-                "listen": "127.0.0.1",
-                "listen_port": 5533,
-                "tag": "dns-in",
-                "type": "direct"
-            },
-            {
-                "listen": "127.0.0.1",
-                "listen_port": 2080,
-                "tag": "mixed-in",
-                "type": "mixed"
-            },
-            {
-                "address": ["172.19.0.1/24"],
+                "address": ["172.19.0.1/24", "fdfe:dcba:9876::1/126"],
                 "auto_redirect": True,
                 "auto_route": True,
+                "interface_name": TUN_NAME,
                 "mtu": 1500,
                 "route_exclude_address": ["127.0.0.0/8"],
                 "stack": "system",
                 "strict_route": True,
                 "tag": "tun-in",
-                "type": "tun"
-            }
+                "type": "tun",
+            },
         ],
-        "log": {
-            "level": "warn"
-        },
+        "log": {"level": "warn"},
         "outbounds": [selector] + OUTBOUNDS + [{"tag": "direct", "type": "direct"}],
         "route": {
             "auto_detect_interface": True,
-            "default_domain_resolver": {
-                "server": "dns-direct",
-                "strategy": ""
-            },
+            "default_domain_resolver": {"server": "dns-direct", "strategy": ""},
             "final": "proxy",
             "find_process": True,
-            "rule_set": [],
             "rules": [
-                {
-                    "action": "sniff",
-                    "inbound": "dns-in"
-                },
-                {
-                    "action": "hijack-dns",
-                    "inbound": "dns-in",
-                    "protocol": "dns"
-                },
+                {"action": "sniff", "inbound": "tun-in"},
                 {
                     "action": "reject",
-                    "inbound": "dns-in"
+                    "network": "udp",
+                    "port": 443,
+                    "domain_suffix": ["scdn.co", "spotify.com", "spotifycdn.com"],
                 },
-                {
-                    "action": "sniff",
-                    "inbound": ["mixed-in", "tun-in"]
-                },
-                {
-                    "action": "hijack-dns",
-                    "protocol": "dns"
-                }
-            ]
-        }
+                {"action": "hijack-dns", "protocol": "dns"},
+            ],
+        },
     }
 
     return cfg
@@ -1255,6 +1770,7 @@ def main():
     if len(sys.argv) < 3:
         sys.exit(1)
     config_path, raw_file = sys.argv[1], sys.argv[2]
+    extras_path = sys.argv[3] if len(sys.argv) > 3 else None
     try:
         with open(raw_file, "r", encoding="utf-8", errors="replace") as f:
             raw = f.read().strip()
@@ -1270,6 +1786,9 @@ def main():
 
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(build_config(), f, indent=2, ensure_ascii=False)
+    if extras_path:
+        with open(extras_path, "w", encoding="utf-8") as f:
+            json.dump(EXTRAS, f, ensure_ascii=False)
     sys.stderr.write("parsed %d node(s)\n" % len(ORDER_TAGS))
 
 

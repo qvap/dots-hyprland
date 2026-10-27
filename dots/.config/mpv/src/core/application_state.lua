@@ -1,0 +1,231 @@
+local application_state = {}
+
+local TOOLTIP_FADE_DURATION = 0.14
+local TOOLTIP_SPRING_STIFFNESS = 420
+local TOOLTIP_SPRING_DAMPING = 20
+local POPUP_FADE_DURATION = 0.18
+local POPUP_MORPH_STIFFNESS = 560
+local POPUP_MORPH_DAMPING = 38
+
+function application_state.new(args)
+  local opts = args.opts
+  local animation = args.animation
+  local runtime = {
+    viewport = {w = 1280, h = 720, dpi = 1},
+    controller = {
+      visible = opts.show_on_mouse_move,
+      input_suppressed = false,
+      pointer_timed_out = false,
+      hide_cursor_after_fade = false,
+      bounds = nil
+    },
+    window_controls = {
+      bounds = nil, reveal_bounds = nil, hovered = false, visible = false
+    },
+    pip = {active = false, restore = nil, bounds = nil, raise_timer = nil},
+    pointer = {
+      x = -1, y = -1, active = nil,
+      hover_hitbox = nil, context_hover_hitbox = nil,
+      seek_hover_x = nil, last_move_dispatch = -math.huge
+    },
+    context_menu = {
+      open = false, x = 0, y = 0,
+      close_x = nil, close_y = nil, bounds = nil,
+      pending_x = nil, pending_y = nil
+    },
+    update = {
+      open = false, checking = false, busy = false, done = false,
+      dont_ask = false, mode = "ask", bounds = nil, version = nil,
+      tag = nil, notes = nil, error = nil, asset_url = nil,
+      scroll_index = 0, disable_auto_update = false, last_check = 0
+    },
+    input = {
+      hitboxes = {}, order = {}, next_id = 0,
+      keyboard_focus = nil, keyboard_scope = nil,
+      drawing_keyboard_focus = false, keyboard_generation = 0
+    },
+    time = {
+      show_remaining = opts.show_remaining_time,
+      adjust_with_speed = opts.adjust_time_with_speed
+    },
+    temporary_speed = {active = false, previous = nil},
+    seek = {
+      dragging = false, position = nil, offset_x = 0,
+      preview_bounds = nil, position_pill_visible = false
+    },
+    wheel = {kind = nil, amount = 0, timer = nil},
+    edge_seek = {
+      left = {bounds = nil},
+      right = {bounds = nil}
+    },
+    chapter = {
+      open = false, scroll_index = 0, bounds = nil,
+      dragging_scroll = false, hidden_notified = true
+    },
+    playlist = {
+      open = false, scroll_index = 0, bounds = nil, list_bounds = nil,
+      anchor_bounds = nil,
+      handoff = false,
+      drag_from = nil, drag_to = nil, drag_start_y = nil,
+      dragging_scroll = false,
+      shuffled = false, shuffle_initialized = false,
+      hidden_notified = true
+    },
+    subtitle = {open = false, scroll_index = 0, bounds = nil, hidden_notified = true},
+    audio = {open = false, scroll_index = 0, bounds = nil, hidden_notified = true},
+    settings = {
+      open = false, page = "root", pending_page = nil,
+      transition_phase = nil, resize_started = false,
+      scroll_index = 0, bounds = nil, hidden_notified = true
+    },
+    volume = {
+      dragging = false, popup_bounds = nil, button_bounds = nil,
+      tooltip_suppressed_until = 0
+    },
+    playback_indicator = {
+      last_paused = nil, last_volume = nil, last_muted = nil,
+      last_subtitle_id = nil, last_sub_visibility = nil,
+      ab_loop_initialized = false, last_ab_loop_a = nil,
+      last_ab_loop_b = nil,
+      icon = "play_arrow", label = nil, label_color = "#FFFFFF",
+      hide_timer = nil, pill_only = false, show_on_empty = false
+    },
+    ytdl = {
+      active = false, source = nil, url = nil, items = {}, caption_items = {},
+      is_live = nil,
+      request_id = 0, selected_id = nil, pending_selected_id = nil,
+      pending_playback_url = nil,
+      caption_loading_id = nil, caption_request_id = 0,
+      pending_subtitles = nil
+    },
+    sponsorblock = {
+      active = false, loading = false, video_id = nil, user_id = nil,
+      segments = {}, prompt = nil, feedback = nil, last_segment = nil,
+      draft = nil, submitting = false,
+      skipped_chapters = {}, dismissed_chapters = {}
+    },
+    tooltip = {hover_key = nil, hover_start = 0, requested = false, visual = nil},
+    thumbnail = {
+      width = 0, height = 0, disabled = true, available = false,
+      visible = false
+    },
+    timers = {
+      hide = nil, frame = nil, render = nil, progress = nil,
+      pointer_move = nil,
+      frame_interval = 1 / 60
+    },
+    loading = {started_ms = args.now_ms(), quality_switching = false},
+    media = {loading = true},
+    effects = {order = {}, by_key = {}},
+    properties = {},
+    snapshot = {},
+    frame = {
+      rendering = false,
+      pending = false,
+      request_mode = nil,
+      last_render = -math.huge
+    }
+  }
+
+  runtime.controller.opacity = animation.tween({
+    initial = opts.show_on_mouse_move and 1 or 0, duration = 0.18
+  })
+  runtime.window_controls.opacity = animation.tween({
+    initial = 0, duration = 0.16
+  })
+  runtime.context_menu.animation = animation.tween({
+    initial = 0, duration = POPUP_FADE_DURATION
+  })
+  runtime.context_menu.width_animation = animation.spring({
+    initial = 28,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.context_menu.height_animation = animation.spring({
+    initial = 28,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.volume.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.chapter.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.chapter.fade = animation.tween({
+    initial = 0, duration = POPUP_FADE_DURATION
+  })
+  runtime.playlist.animation = animation.tween({
+    initial = 0, duration = POPUP_FADE_DURATION
+  })
+  runtime.playlist.controls_opacity = animation.tween({
+    initial = 1, duration = 0.14
+  })
+  runtime.playlist.width_animation = animation.spring({
+    initial = 118,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.playlist.height_animation = animation.spring({
+    initial = 42,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.subtitle.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.audio.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.settings.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.settings.fade = animation.tween({
+    initial = 0, duration = POPUP_FADE_DURATION
+  })
+  runtime.settings.content_animation = animation.tween({initial = 1, duration = 0.12})
+  runtime.settings.width_animation = animation.spring({
+    initial = 320,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.settings.height_animation = animation.spring({
+    initial = 292,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.playback_indicator.opacity = animation.tween({initial = 0, duration = 0.18})
+  runtime.playback_indicator.scale = animation.spring({initial = 1, stiffness = 520, damping = 32})
+  runtime.sponsorblock.actions_opacity = animation.tween({
+    initial = 0, duration = 0.16
+  })
+  for _, side in ipairs({"left", "right"}) do
+    runtime.edge_seek[side].opacity = animation.tween({initial = 0, duration = 0.15})
+    runtime.edge_seek[side].slide = animation.spring({
+      initial = 0, stiffness = 460, damping = 30
+    })
+    runtime.edge_seek[side].feedback = animation.spring({
+      initial = 0, stiffness = 620, damping = 30
+    })
+  end
+  runtime.tooltip.opacity = animation.tween({initial = 0, duration = TOOLTIP_FADE_DURATION})
+  runtime.tooltip.slide = animation.spring({
+    initial = 0,
+    stiffness = TOOLTIP_SPRING_STIFFNESS,
+    damping = TOOLTIP_SPRING_DAMPING
+  })
+
+  return runtime
+end
+
+return application_state

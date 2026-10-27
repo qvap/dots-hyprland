@@ -15,18 +15,26 @@ import Quickshell.Services.Mpris
 Item { // Player instance
     id: root
     required property MprisPlayer player
-    property var artUrl: player?.trackArtUrl
+    property string artUrl: player?.trackArtUrl ?? ""
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
     property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.m3colors.m3secondaryContainer
+    readonly property color artDominantColor: artUrl.length > 0
+        ? ColorUtils.mix(colorQuantizer.colors[0] ?? Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.8)
+        : Appearance.m3colors.m3secondaryContainer
     property bool downloaded: false
+    readonly property bool hasArtColors: colorQuantizer.colors.length > 0
     property list<real> visualizerPoints: []
     property real maxVisualizerValue: 1000 // Max value in the data points
     property int visualizerSmoothing: 2 // Number of points to average for smoothing
     property real radius
+    property bool animateTrackChanges: true
+    property real backgroundMargin: Appearance.sizes.elevationMargin
+    property bool clipBackground: true
+    property bool showShadow: true
 
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
+    readonly property string displayedArtFilePath: !root.downloaded || root.artUrl.length === 0 ? ""
+        : root.artUrl.startsWith("file://") ? root.artUrl : Qt.resolvedUrl(artFilePath)
 
     component TrackChangeButton: RippleButton {
         implicitWidth: 24
@@ -51,35 +59,47 @@ Item { // Player instance
     }
 
     Timer { // Force update for revision
-        running: root.player?.playbackState == MprisPlaybackState.Playing
-        interval: Config.options.resources.updateInterval
+        running: root.visible && root.player?.playbackState == MprisPlaybackState.Playing
+        interval: 250
         repeat: true
         onTriggered: {
             root.player.positionChanged();
         }
     }
 
-    onArtFilePathChanged: {
-        if (root.artUrl.length == 0) {
-            root.artDominantColor = Appearance.m3colors.m3secondaryContainer;
+    onArtFilePathChanged: refreshArtwork()
+    Component.onCompleted: refreshArtwork()
+
+    function refreshArtwork() {
+        root.downloaded = false;
+        if (root.artUrl.length === 0) return;
+        if (root.artUrl.startsWith("file://")) {
+            root.downloaded = true;
             return;
         }
-
-        // Binding does not work in Process
+        // Let the current request finish; its exit handler starts the latest one.
+        if (coverArtDownloader.running) return;
         coverArtDownloader.targetFile = root.artUrl;
         coverArtDownloader.artFilePath = root.artFilePath;
-        // Download
-        root.downloaded = false;
         coverArtDownloader.running = true;
     }
 
     Process { // Cover art downloader
         id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}'`]
-        onExited: (exitCode, exitStatus) => {
-            root.downloaded = true;
+        property string targetFile
+        property string artFilePath
+        // Arguments instead of interpolation, so URLs with quotes are safe; the
+        // partial file is renamed only when complete, so a cut-off download is never shown.
+        command: ["bash", "-c",
+            '[ -f "$2" ] || { part="$2.$$.part"; trap \'rm -f -- "$part"\' EXIT; '
+                + 'curl -4 -f -sSL -o "$part" -- "$1" && mv -- "$part" "$2"; }',
+            "player-art", targetFile, artFilePath]
+        onExited: exitCode => {
+            if (targetFile !== root.artUrl || artFilePath !== root.artFilePath) {
+                root.refreshArtwork();
+                return;
+            }
+            root.downloaded = exitCode === 0;
         }
     }
 
@@ -96,16 +116,17 @@ Item { // Player instance
 
     StyledRectangularShadow {
         target: background
+        visible: root.showShadow
     }
 
     Rectangle { // Background
         id: background
         anchors.fill: parent
-        anchors.margins: Appearance.sizes.elevationMargin
+        anchors.margins: root.backgroundMargin
         color: ColorUtils.applyAlpha(blendedColors.colLayer0, 1)
         radius: root.radius
 
-        layer.enabled: true
+        layer.enabled: root.clipBackground
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: background.width
@@ -138,7 +159,7 @@ Item { // Player instance
         WaveVisualizer {
             id: visualizerCanvas
             anchors.fill: parent
-            live: root.player?.isPlaying
+            live: root.player?.isPlaying ?? false
             points: root.visualizerPoints
             maxVisualizerValue: root.maxVisualizerValue
             smoothing: root.visualizerSmoothing
@@ -245,16 +266,17 @@ Item { // Player instance
                 Layout.fillHeight: true
                 spacing: 2
 
-                StyledText {
+                ScrollingText {
                     id: trackTitle
                     Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
                     font.pixelSize: Appearance.font.pixelSize.large
+                    font.family: Appearance.font.family.main
                     color: blendedColors.colOnLayer0
-                    elide: Text.ElideRight
+                    showEdgeGradients: false
+                    centered: false
+                    scrollOnlyOnOverflow: true
                     text: StringUtils.cleanMusicTitle(root.player?.trackTitle) || "Untitled"
-                    animateChange: true
-                    animationDistanceX: 6
-                    animationDistanceY: 0
                 }
 
                 StyledText {
@@ -263,8 +285,8 @@ Item { // Player instance
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: blendedColors.colSubtext
                     elide: Text.ElideRight
-                    text: root.player?.trackArtist
-                    animateChange: true
+                    text: root.player?.trackArtist ?? ""
+                    animateChange: root.animateTrackChanges
                     animationDistanceX: 6
                     animationDistanceY: 0
                 }
@@ -330,7 +352,7 @@ Item { // Player instance
                                 }
                                 active: !(root.player?.canSeek ?? false)
                                 sourceComponent: StyledProgressBar {
-                                    wavy: root.player?.isPlaying
+                                    wavy: root.player?.isPlaying ?? false
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     value: root.player?.position / root.player?.length

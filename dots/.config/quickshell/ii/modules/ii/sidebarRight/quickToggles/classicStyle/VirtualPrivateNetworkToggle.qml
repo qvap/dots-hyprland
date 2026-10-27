@@ -10,7 +10,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 
 QuickToggleButton {
-    toggled: Vpn.status === "active"
+    toggled: Vpn.on
     buttonIcon: "vpn_key"
     onClicked: Vpn.toggle()
     altAction: () => {

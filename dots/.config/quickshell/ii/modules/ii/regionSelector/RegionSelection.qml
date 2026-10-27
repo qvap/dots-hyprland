@@ -5,6 +5,7 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 import QtQuick
+import "AnnotationGeometry.js" as AnnotationGeometry
 import QtQuick.Controls
 import Qt.labs.synchronizer
 import Quickshell
@@ -29,13 +30,18 @@ PanelWindow {
 
     // Modes
     // TODO: Ask: sidebar AI
-    enum SnipAction { Copy, Edit, Search, CharRecognition, Record, RecordWithSound } 
+    enum SnipAction { Copy, Edit, Search, CharRecognition, Record, RecordWithSound }
     enum SelectionMode { RectCorners, Circle }
-    enum Phase { Select, Post }
+    enum Phase { Select, Annotate, Post }
     property var action: RegionSelection.SnipAction.Copy
     property var selectionMode: RegionSelection.SelectionMode.RectCorners
     property var phase: RegionSelection.Phase.Select
     signal dismiss()
+
+    // Annotation editor (in-shell, ported from quickshot)
+    signal annotateStarted()
+    property bool otherAnnotating: false // another monitor owns the annotation session
+    property string editMode: "" // "copy" | "save" for a pending grab
 
     // Styles
     property string screenshotDir: Directories.screenshotTemp
@@ -263,6 +269,7 @@ PanelWindow {
         if (root.regionWidth <= 0 || root.regionHeight <= 0) {
             console.warn("[Region Selector] Invalid region size, skipping snip.");
             root.dismiss();
+            return;
         }
 
         // Clamp region to screen bounds
@@ -271,11 +278,22 @@ PanelWindow {
         root.regionWidth = Math.max(0, Math.min(root.regionWidth, root.screen.width - root.regionX));
         root.regionHeight = Math.max(0, Math.min(root.regionHeight, root.screen.height - root.regionY));
 
-        // Adjust action
-        if (root.action === RegionSelection.SnipAction.Copy || root.action === RegionSelection.SnipAction.Edit) {
+        // Adjust action: default Copy launch upgrades to Edit on right-click.
+        // An explicit Edit launch stays Edit regardless of button.
+        if (root.action === RegionSelection.SnipAction.Copy) {
             root.action = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.Edit : RegionSelection.SnipAction.Copy;
         }
-        
+
+        // Edit: annotate in-shell instead of shelling out to satty/swappy.
+        if (root.action === RegionSelection.SnipAction.Edit) {
+            AnnotationState.reset();
+            root.selectionMode = RegionSelection.SelectionMode.RectCorners;
+            root.phase = RegionSelection.Phase.Annotate;
+            root.annotateStarted();
+            keyHandler.forceActiveFocus();
+            return;
+        }
+
         const screenshotDir = Config.options.screenSnip.savePath !== "" ? //
             Config.options.screenSnip.savePath : "";
         var screenshotAction = root.getScreenshotAction();
@@ -297,37 +315,72 @@ PanelWindow {
         }
     }
 
-    // Only clickable in Selection phase
+    // Clickable while selecting or annotating (unless another monitor annotates)
     mask: Region {
-        item: switch(root.phase) {
-            case RegionSelection.Phase.Select: return mouseArea;
-            case RegionSelection.Phase.Post: return null;
+        item: (root.otherAnnotating || root.phase === RegionSelection.Phase.Post) ? null : mouseArea
+    }
+
+    // Exportable scene: frozen screenshot + annotations. Only this clipped
+    // subtree is captured by grabToImage; selection chrome is a sibling below.
+    // On export the clip is reframed to the region and the scene shifted up/left
+    // so the region aligns to the clip origin (single-grab native-res crop).
+    Item {
+        id: exportClip
+        clip: true
+        x: 0
+        y: 0
+        width: root.width
+        height: root.height
+        visible: !root.otherAnnotating
+            && (root.phase === RegionSelection.Phase.Select || root.phase === RegionSelection.Phase.Annotate)
+
+        Item {
+            id: captureRoot
+            x: 0
+            y: 0
+            width: root.width
+            height: root.height
+
+            ScreencopyView { // For freezing
+                id: screencopy
+                anchors.fill: parent
+                live: false
+                captureSource: root.screen
+            }
+
+            AnnotationCanvas {
+                id: canvas
+                anchors.fill: parent
+                backdrop: screencopy
+                visible: root.phase === RegionSelection.Phase.Annotate
+                onEditStarted: {
+                    editor.text = "";
+                    editor.forceActiveFocus();
+                }
+                onEditFinished: keyHandler.forceActiveFocus()
+            }
         }
     }
 
-    ScreencopyView { // For freezing
+    // Keyboard handling for both selection and annotation phases.
+    Item {
+        id: keyHandler
         anchors.fill: parent
-        live: false
-        captureSource: root.screen
-        visible: root.phase === RegionSelection.Phase.Select
-
-        focus: root.visible
-        Keys.onPressed: (event) => { // Esc to close
-            if (event.key === Qt.Key_Escape) {
-                root.dismiss();
-            }
-        }
+        focus: root.visible && canvas.editing === null
+        Keys.onPressed: (event) => root.handleKey(event)
     }
 
     MouseArea {
         id: mouseArea
         anchors.fill: parent
-        cursorShape: Qt.CrossCursor
+        visible: !root.otherAnnotating
+        cursorShape: root.phase === RegionSelection.Phase.Select ? Qt.CrossCursor : Qt.ArrowCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         hoverEnabled: true
 
-        // Controls
+        // Controls (selection phase only; annotation uses its own areas)
         onPressed: (mouse) => {
+            if (root.phase !== RegionSelection.Phase.Select) return;
             root.dragStartX = mouse.x;
             root.dragStartY = mouse.y;
             root.draggingX = mouse.x;
@@ -336,6 +389,7 @@ PanelWindow {
             root.mouseButton = mouse.button;
         }
         onReleased: (mouse) => {
+            if (root.phase !== RegionSelection.Phase.Select) return;
             // Detect if it was a click -> Try to select targeted region
             if (root.draggingX === root.dragStartX && root.draggingY === root.dragStartY) {
                 if (root.targetedRegionValid()) {
@@ -358,6 +412,7 @@ PanelWindow {
             root.snip();
         }
         onPositionChanged: (mouse) => {
+            if (root.phase !== RegionSelection.Phase.Select) return;
             root.updateTargetedRegion(mouse.x, mouse.y);
             if (!root.dragging) return;
             root.draggingX = mouse.x;
@@ -380,6 +435,7 @@ PanelWindow {
                 mouseY: mouseArea.mouseY
                 color: root.selectionBorderColor
                 overlayColor: root.overlayColor
+                showAimLines: root.phase === RegionSelection.Phase.Select && Config.options.regionSelector.rect.showAimLines
                 breathingBorderOnly: root.phase === RegionSelection.Phase.Post
             }
         }
@@ -537,6 +593,245 @@ PanelWindow {
                 }
             }
         }
-        
+
+        // ---- Annotation phase ------------------------------------------------
+        // Draw gestures, confined to the (now fixed) region.
+        MouseArea {
+            id: drawArea
+            z: 5
+            enabled: root.phase === RegionSelection.Phase.Annotate
+            visible: enabled
+            x: root.regionX
+            y: root.regionY
+            width: root.regionWidth
+            height: root.regionHeight
+            acceptedButtons: Qt.LeftButton
+            preventStealing: true
+            property bool selectGesture: false
+            property point pressPoint
+            property rect pressRegion
+            cursorShape: AnnotationState.tool === "select" ? (pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.CrossCursor
+            onPressed: mouse => {
+                pressPoint = mapToItem(mouseArea, mouse.x, mouse.y);
+                pressRegion = Qt.rect(root.regionX, root.regionY, root.regionWidth, root.regionHeight);
+                selectGesture = AnnotationState.tool === "select";
+                if (selectGesture) {
+                    canvas.selectAt(pressPoint.x, pressPoint.y);
+                    if (canvas.selectedIndex >= 0) canvas.beginResize();
+                } else canvas.beginDraft(pressPoint.x, pressPoint.y);
+            }
+            onPositionChanged: mouse => {
+                if (!pressed) return;
+                const point = mapToItem(mouseArea, mouse.x, mouse.y);
+                if (selectGesture) {
+                    const dx = point.x - pressPoint.x, dy = point.y - pressPoint.y;
+                    const limit = Qt.rect(0, 0, root.width, root.height);
+                    if (canvas.selectedIndex >= 0) canvas.moveSelected(dx, dy, limit);
+                    else {
+                        const moved = AnnotationGeometry.move(pressRegion, dx, dy, limit);
+                        root.regionX = moved.x;
+                        root.regionY = moved.y;
+                    }
+                } else canvas.updateDraft(
+                    Math.max(root.regionX, Math.min(point.x, root.regionX + root.regionWidth)),
+                    Math.max(root.regionY, Math.min(point.y, root.regionY + root.regionHeight)));
+            }
+            onReleased: {
+                if (selectGesture) canvas.finishResize();
+                else canvas.endDraft();
+            }
+            onCanceled: {
+                if (selectGesture) canvas.finishResize();
+                else canvas.endDraft();
+            }
+        }
+
+        ResizeHandles {
+            z: 7
+            anchors.fill: parent
+            visible: root.phase === RegionSelection.Phase.Annotate
+            targetRect: Qt.rect(root.regionX, root.regionY, root.regionWidth, root.regionHeight)
+            limitRect: Qt.rect(0, 0, root.width, root.height)
+            onResizeStarted: {
+                canvas.commitDraft();
+                canvas.selectedIndex = -1;
+            }
+            onResized: bounds => {
+                root.regionX = bounds.x;
+                root.regionY = bounds.y;
+                root.regionWidth = bounds.width;
+                root.regionHeight = bounds.height;
+            }
+        }
+        ResizeHandles {
+            z: 8
+            anchors.fill: parent
+            visible: root.phase === RegionSelection.Phase.Annotate && canvas.selectedIndex >= 0
+                && ["rect", "ellipse", "text"].includes(canvas.annotations[canvas.selectedIndex]?.type)
+            targetRect: canvas.selectedBounds
+            limitRect: Qt.rect(0, 0, root.width, root.height)
+            cornersOnly: canvas.annotations[canvas.selectedIndex]?.type === "text"
+            onResizeStarted: canvas.beginResize()
+            onResized: bounds => canvas.resizeSelected(bounds)
+            onResizeFinished: canvas.finishResize()
+        }
+
+        // Inline text editor. Lives outside the captured subtree, so the live
+        // editor is never part of the exported image (the committed Text is).
+        TextInput {
+            id: editor
+            z: 6
+            visible: canvas.editing !== null
+            enabled: visible
+            x: canvas.editing ? canvas.editing.x1 : 0
+            y: canvas.editing ? canvas.editing.y1 : 0
+            color: canvas.editing ? canvas.editing.color : "white"
+            font.family: Appearance.font.family.main
+            font.bold: true
+            font.pixelSize: canvas.editing ? canvas.editing.fontSize : AnnotationState.fontSize
+            selectByMouse: true
+            cursorVisible: true
+            onTextChanged: if (canvas.editing) canvas.editing.text = text
+            onAccepted: canvas.finishEditing()
+            onActiveFocusChanged: if (!activeFocus && canvas.editing) canvas.finishEditing()
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Escape) {
+                    canvas.cancelEditing();
+                    event.accepted = true;
+                }
+            }
+        }
+
+        AnnotationToolbar {
+            id: annotationToolbar
+            z: 10000
+            visible: root.phase === RegionSelection.Phase.Annotate
+            anchors.fill: parent
+            selection: Qt.rect(root.regionX, root.regionY, root.regionWidth, root.regionHeight)
+            onUndo: canvas.undo()
+            onClearAll: canvas.clearAll()
+            onCopy: root.exportEdit("copy")
+            onSave: root.exportEdit("save")
+            onClose: root.dismiss()
+        }
+    }
+
+    // ---- Annotation export (grab -> save/copy) -------------------------------
+    Timer {
+        id: grabTimer
+        interval: 24
+        onTriggered: {
+            const grab = exportClip.grabToImage((result) => root.deliverEdit(result));
+            if (!grab) {
+                root.abortExport();
+                return;
+            }
+            grabWatchdog.start();
+        }
+    }
+    Timer { // Recover instead of hanging if the grab callback never fires.
+        id: grabWatchdog
+        interval: 2500
+        onTriggered: root.abortExport()
+    }
+
+    function handleKey(event) {
+        if (event.key === Qt.Key_Escape) {
+            root.dismiss();
+            event.accepted = true;
+            return;
+        }
+        if (root.phase !== RegionSelection.Phase.Annotate) return;
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            root.exportEdit("copy");
+            event.accepted = true;
+            return;
+        }
+        if (event.modifiers & Qt.ControlModifier) {
+            if (event.key === Qt.Key_S) { root.exportEdit("save"); event.accepted = true; }
+            else if (event.key === Qt.Key_C) { root.exportEdit("copy"); event.accepted = true; }
+            else if (event.key === Qt.Key_Z) { canvas.undo(); event.accepted = true; }
+            return;
+        }
+        const map = {};
+        map[Qt.Key_V] = "select";
+        map[Qt.Key_R] = "rect";
+        map[Qt.Key_O] = "ellipse";
+        map[Qt.Key_A] = "arrow";
+        map[Qt.Key_L] = "line";
+        map[Qt.Key_P] = "pen";
+        map[Qt.Key_H] = "highlight";
+        map[Qt.Key_T] = "text";
+        map[Qt.Key_N] = "counter";
+        map[Qt.Key_X] = "pixelate";
+        if (map[event.key] !== undefined) {
+            AnnotationState.tool = map[event.key];
+            event.accepted = true;
+        }
+    }
+
+    function exportEdit(mode) {
+        if (root.phase !== RegionSelection.Phase.Annotate || grabWatchdog.running) return;
+        canvas.commitDraft();
+        root.editMode = mode;
+        const rx = Math.round(root.regionX);
+        const ry = Math.round(root.regionY);
+        const rw = Math.max(1, Math.round(root.regionWidth));
+        const rh = Math.max(1, Math.round(root.regionHeight));
+        // Reframe the clip to the region and shift the scene to its origin.
+        exportClip.x = rx;
+        exportClip.y = ry;
+        exportClip.width = rw;
+        exportClip.height = rh;
+        captureRoot.x = -rx;
+        captureRoot.y = -ry;
+        grabTimer.start();
+    }
+
+    function abortExport() {
+        grabWatchdog.stop();
+        exportClip.x = 0;
+        exportClip.y = 0;
+        exportClip.width = Qt.binding(() => root.width);
+        exportClip.height = Qt.binding(() => root.height);
+        captureRoot.x = 0;
+        captureRoot.y = 0;
+        Quickshell.execDetached(["notify-send", "-a", "Quickshell", "-i", "image-x-generic",
+            Translation.tr("Screenshot"), Translation.tr("Export failed, try again")]);
+    }
+
+    function deliverEdit(result) {
+        grabWatchdog.stop();
+        if (!result) {
+            root.abortExport();
+            return;
+        }
+        const outPath = `${root.screenshotDir}/edit-${root.screen.name}.png`;
+        if (!result.saveToFile(outPath)) {
+            root.abortExport();
+            return;
+        }
+        Quickshell.execDetached(root.deliverCommand(root.editMode, outPath));
+        root.dismiss();
+    }
+
+    function deliverCommand(mode, outPath) {
+        const q = (s) => `'${StringUtils.shellSingleQuoteEscape(s)}'`;
+        const configuredDir = Config.options.screenSnip.savePath;
+        // Save always writes a file; copy only writes one if a dir is configured.
+        const saveDir = (mode === "save")
+            ? (configuredDir !== "" ? configuredDir : `${FileUtils.trimFileProtocol(Directories.pictures)}/Screenshots`)
+            : configuredDir;
+        const saved = (saveDir && saveDir !== "");
+        let parts = [];
+        if (saved) {
+            parts.push(`mkdir -p ${q(saveDir)}`);
+            parts.push(`cp ${q(outPath)} ${q(saveDir)}/"screenshot-$(date '+%Y-%m-%d_%H.%M.%S').png"`);
+        }
+        parts.push(`wl-copy --type image/png < ${q(outPath)}`);
+        parts.push(`notify-send -a Quickshell -i ${q(outPath)} `
+            + `'${Translation.tr("Screenshot")}' `
+            + `'${saved ? Translation.tr("Saved and copied to clipboard") : Translation.tr("Copied to clipboard")}'`);
+        return ["bash", "-c", parts.join(" && ")];
     }
 }

@@ -15,6 +15,10 @@ Scope {
 
     PanelWindow {
         id: root
+        readonly property string popupPosition: Config.options.notifications.position
+        readonly property bool popupAtBottom: popupPosition.startsWith("bottom_")
+        readonly property bool popupAtLeft: popupPosition.endsWith("_left")
+        readonly property bool popupAtRight: popupPosition.endsWith("_right")
         visible: (Notifications.popupList.length > 0) && !GlobalStates.screenLocked
         screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? null
 
@@ -24,7 +28,8 @@ Scope {
 
         anchors {
             top: true
-            right: true
+            left: root.popupAtLeft
+            right: root.popupAtRight
             bottom: true
         }
 
@@ -38,10 +43,10 @@ Scope {
         WListView {
             id: listview
             anchors {
-                bottom: parent.bottom
                 right: parent.right
                 left: parent.left
             }
+            y: root.popupAtBottom ? parent.height - height : 0
             leftMargin: 16
             rightMargin: 16
             topMargin: 16

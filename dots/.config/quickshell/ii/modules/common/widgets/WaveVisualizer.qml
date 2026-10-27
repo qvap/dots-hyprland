@@ -13,9 +13,12 @@ Canvas { // Visualizer
     property bool live: true
     property color color: Appearance.m3colors.m3primary
 
-    onPointsChanged: () => {
-        root.requestPaint()
-    }
+    onPointsChanged: if (visible) requestPaint()
+    onVisibleChanged: if (visible) requestPaint()
+    onLiveChanged: if (visible) requestPaint()
+    onColorChanged: if (visible) requestPaint()
+    onSmoothingChanged: if (visible) requestPaint()
+    onMaxVisualizerValueChanged: if (visible) requestPaint()
 
     anchors.fill: parent
     onPaint: {
@@ -31,7 +34,9 @@ Canvas { // Visualizer
 
         // Smoothing: simple moving average (optional)
         var smoothWindow = root.smoothing; // adjust for more/less smoothing
-        root.smoothPoints = [];
+        // Build the output in a JS array. Writing a QML sequence per sample
+        // repeatedly copies/notifies the property; publish it just once.
+        var smoothed = new Array(n);
         for (var i = 0; i < n; ++i) {
             var sum = 0, count = 0;
             for (var j = -smoothWindow; j <= smoothWindow; ++j) {
@@ -39,15 +44,15 @@ Canvas { // Visualizer
                 sum += points[idx];
                 count++;
             }
-            root.smoothPoints.push(sum / count);
+            smoothed[i] = root.live ? sum / count : 0;
         }
-        if (!root.live) root.smoothPoints.fill(0); // If not playing, show no points
+        root.smoothPoints = smoothed;
 
         ctx.beginPath();
         ctx.moveTo(0, h);
         for (var i = 0; i < n; ++i) {
             var x = i * w / (n - 1);
-            var y = h - (root.smoothPoints[i] / maxVal) * h;
+            var y = h - (smoothed[i] / maxVal) * h;
             ctx.lineTo(x, y);
         }
         ctx.lineTo(w, h);

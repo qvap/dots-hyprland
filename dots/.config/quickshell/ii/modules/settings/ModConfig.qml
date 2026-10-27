@@ -16,6 +16,18 @@ ContentPage {
         command: [Directories.aiTranslationScriptPath, translationProc.locale]
     }
 
+    Process {
+        id: bannerChooser
+        command: ["kdialog", "--getopenfilename", Quickshell.env("HOME") + "/Pictures", "image/png image/jpg image/jpeg image/webp"]
+        stdout: StdioCollector {
+            id: bannerChooserOutput
+        }
+        onExited: code => {
+            if (code === 0 && bannerChooserOutput.text.trim() !== "")
+                Config.options.sidebar.bannerImage = bannerChooserOutput.text.trim();
+        }
+    }
+
     ContentSection {
         icon: "blur_linear"
         title: Translation.tr("Effects")
@@ -35,6 +47,93 @@ ContentPage {
         NoticeBox {
             Layout.fillWidth: true
             text: Translation.tr('Effects are utilized using GLSL shaders, which can affect performance on low-end devices.')
+        }
+    }
+
+    ContentSection {
+        icon: "airwave"
+        title: Translation.tr("AI Flow")
+
+        ConfigSwitch {
+            buttonIcon: "mode_off_on"
+            text: Translation.tr("AI Flow Enabled")
+            checked: Config.options.effects.aiFlowEnabled
+            enabled: Config.options.effects.enabled
+            onCheckedChanged: {
+                Config.options.effects.aiFlowEnabled = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Enable AI Chat waves flow effect")
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "splitscreen_right"
+        title: Translation.tr("Right Sidebar")
+
+        ConfigSwitch {
+            buttonIcon: "planner_banner_ad_pt"
+            text: Translation.tr("Banner")
+            checked: Config.options.sidebar.banner
+            onCheckedChanged: Config.options.sidebar.banner = checked
+        }
+
+        ConfigRow {
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                materialIcon: "image"
+                mainText: Translation.tr("Choose banner")
+                onClicked: bannerChooser.running = true
+            }
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                materialIcon: "restart_alt"
+                mainText: Translation.tr("Use wallpaper")
+                enabled: Config.options.sidebar.bannerImage !== ""
+                onClicked: Config.options.sidebar.bannerImage = ""
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "motion_play"
+        title: Translation.tr("Media")
+
+        ConfigSwitch {
+            buttonIcon: "format_quote"
+            text: Translation.tr("Only title")
+            checked: Config.options.bar.media.onlyTitle
+            onCheckedChanged: Config.options.bar.media.onlyTitle = checked
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Preferred player")
+
+            MaterialTextArea {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("e.g. spotify, firefox")
+                text: Config.options.bar.media.preferredPlayer
+                wrapMode: TextEdit.Wrap
+                onTextChanged: {
+                    Config.options.bar.media.preferredPlayer = text;
+                }
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "skull"
+        title: Translation.tr("Forbidden Zone")
+
+        ConfigSwitch {
+            buttonIcon: "skillet"
+            text: Translation.tr("Special Sauce")
+            checked: Config.options.mods.specialSauce
+            onCheckedChanged: Config.options.mods.specialSauce = checked
+            StyledToolTip {
+                text: Translation.tr("Enable extra visual decorations")
+            }
         }
     }
 }

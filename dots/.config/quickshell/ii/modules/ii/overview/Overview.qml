@@ -73,7 +73,8 @@ Scope {
             visible: GlobalStates.overviewOpen
             anchors {
                 horizontalCenter: parent.horizontalCenter
-                top: parent.top
+                top: Config.options.overview.center ? undefined : parent.top
+                verticalCenter: Config.options.overview.center ? parent.verticalCenter : undefined
             }
             spacing: -8
 
@@ -94,10 +95,10 @@ Scope {
             Loader {
                 id: overviewLoader
                 anchors.horizontalCenter: parent.horizontalCenter
+                visible: panelWindow.searchingText == ""
                 active: GlobalStates.overviewOpen && (Config?.options.overview.enable ?? true)
                 sourceComponent: OverviewWidget {
                     screen: panelWindow.screen
-                    visible: (panelWindow.searchingText == "")
                 }
             }
         }

@@ -14,6 +14,7 @@ Singleton {
     property string distroId: "unknown"
     property string distroIcon: "linux-symbolic"
     property string username: "user"
+    property string hostname: ""
     property string homeUrl: ""
     property string documentationUrl: ""
     property string supportUrl: ""
@@ -23,6 +24,11 @@ Singleton {
     property string desktopEnvironment: ""
     property string windowingSystem: ""
 
+    function refreshHostname() {
+        getHostname.running = false
+        getHostname.running = true
+    }
+
     Timer {
         triggeredOnStart: true
         interval: 1
@@ -30,6 +36,7 @@ Singleton {
         repeat: false
         onTriggered: {
             getUsername.running = true
+            getHostname.running = true
             fileOsRelease.reload()
             const textOsRelease = fileOsRelease.text()
 
@@ -93,6 +100,14 @@ Singleton {
             onRead: data => {
                 root.username = data.trim()
             }
+        }
+    }
+
+    Process {
+        id: getHostname
+        command: ["cat", "/etc/hostname"]
+        stdout: SplitParser {
+            onRead: data => root.hostname = data.trim()
         }
     }
 

@@ -15,6 +15,15 @@ MouseArea {
     property int columns: 4
     property real previewCellAspectRatio: 4 / 3
     property bool useDarkMode: Appearance.m3colors.darkmode
+    property bool workshopMode: false
+    readonly property var activeGrid: root.workshopMode ? workshopGrid : grid
+
+    onWorkshopModeChanged: {
+        // The field may not change (e.g. "" -> ""), so onTextChanged cannot be relied on to reset this
+        Wallpapers.searchQuery = "";
+        filterField.text = root.workshopMode ? WallpaperEngine.searchQuery : "";
+        if (root.workshopMode) WallpaperEngine.ensureLoaded();
+    }
 
     function updateThumbnails() {
         const totalImageMargin = (Appearance.sizes.wallpaperSelectorItemMargins + Appearance.sizes.wallpaperSelectorItemPadding) * 2;
@@ -72,19 +81,19 @@ MouseArea {
             Wallpapers.navigateForward();
             event.accepted = true;
         } else if (event.key === Qt.Key_Left) {
-            grid.moveSelection(-1);
+            root.activeGrid.moveSelection(-1);
             event.accepted = true;
         } else if (event.key === Qt.Key_Right) {
-            grid.moveSelection(1);
+            root.activeGrid.moveSelection(1);
             event.accepted = true;
         } else if (event.key === Qt.Key_Up) {
-            grid.moveSelection(-grid.columns);
+            root.activeGrid.moveSelection(-root.columns);
             event.accepted = true;
         } else if (event.key === Qt.Key_Down) {
-            grid.moveSelection(grid.columns);
+            root.activeGrid.moveSelection(root.columns);
             event.accepted = true;
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            grid.activateCurrent();
+            root.activeGrid.activateCurrent();
             event.accepted = true;
         } else if (event.key === Qt.Key_Backspace) {
             if (filterField.text.length > 0) {
@@ -205,7 +214,13 @@ MouseArea {
                                         name: "Homework",
                                         path: `${Directories.pictures}/homework`
                                     }
-                                ] : []),]
+                                ] : []),
+                            {
+                                icon: "cloud_download",
+                                name: "Workshop",
+                                path: "",
+                                workshop: true
+                            },]
                         delegate: RippleButton {
                             id: quickDirButton
                             required property var modelData
@@ -213,9 +228,16 @@ MouseArea {
                                 left: parent.left
                                 right: parent.right
                             }
-                            onClicked: Wallpapers.setDirectory(quickDirButton.modelData.path)
+                            onClicked: {
+                                root.workshopMode = quickDirButton.modelData.workshop ?? false;
+                                if (!root.workshopMode) Wallpapers.setDirectory(quickDirButton.modelData.path);
+                            }
                             enabled: modelData.icon.length > 0
-                            toggled: Wallpapers.directory === Qt.resolvedUrl(modelData.path)
+                            toggled: (modelData.workshop ?? false) ? root.workshopMode : (!root.workshopMode && Wallpapers.directory === Qt.resolvedUrl(modelData.path))
+                            StyledToolTip {
+                                extraVisibleCondition: quickDirButton.modelData.workshop ?? false
+                                text: Translation.tr("Wallpaper Engine video wallpapers from the Steam Workshop")
+                            }
                             colBackgroundToggled: Appearance.colors.colSecondaryContainer
                             colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
                             colRippleToggled: Appearance.colors.colSecondaryContainerActive
@@ -248,6 +270,7 @@ MouseArea {
 
                 AddressBar {
                     id: addressBar
+                    visible: !root.workshopMode
                     Layout.margins: 4
                     Layout.fillWidth: true
                     Layout.fillHeight: false
@@ -258,6 +281,21 @@ MouseArea {
                     radius: wallpaperGridBackground.radius - Layout.margins
                 }
 
+                WallpaperEngineHeader {
+                    visible: root.workshopMode
+                    Layout.margins: 4
+                    Layout.fillWidth: true
+                    radius: wallpaperGridBackground.radius - Layout.margins
+                    onOpenLogin: {
+                        GlobalStates.wallpaperSelectorOpen = false;
+                        WallpaperEngine.openLogin();
+                    }
+                    onOpenDownloads: {
+                        root.workshopMode = false;
+                        Wallpapers.setDirectory(WallpaperEngine.downloadDir);
+                    }
+                }
+
                 Item {
                     id: gridDisplayRegion
                     Layout.fillWidth: true
@@ -265,7 +303,7 @@ MouseArea {
 
                     StyledIndeterminateProgressBar {
                         id: indeterminateProgressBar
-                        visible: Wallpapers.thumbnailGenerationRunning && value == 0
+                        visible: root.workshopMode ? WallpaperEngine.loading : (Wallpapers.thumbnailGenerationRunning && value == 0)
                         anchors {
                             bottom: parent.top
                             left: parent.left
@@ -276,14 +314,14 @@ MouseArea {
                     }
 
                     StyledProgressBar {
-                        visible: Wallpapers.thumbnailGenerationRunning && value > 0
+                        visible: !root.workshopMode && Wallpapers.thumbnailGenerationRunning && value > 0
                         value: Wallpapers.thumbnailGenerationProgress
                         anchors.fill: indeterminateProgressBar
                     }
 
                     GridView {
                         id: grid
-                        visible: Wallpapers.folderModel.count > 0
+                        visible: !root.workshopMode && Wallpapers.folderModel.count > 0
 
                         readonly property int columns: root.columns
                         readonly property int rows: Math.max(1, Math.ceil(count / columns))
@@ -343,6 +381,82 @@ MouseArea {
                         }
                     }
 
+                    GridView {
+                        id: workshopGrid
+                        visible: root.workshopMode
+
+                        property int currentIndex: 0
+
+                        anchors.fill: parent
+                        cellWidth: width / root.columns
+                        cellHeight: cellWidth / root.previewCellAspectRatio
+                        interactive: true
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        bottomMargin: extraOptions.implicitHeight
+                        ScrollBar.vertical: StyledScrollBar {}
+
+                        // Infinite scroll: also checked when a page lands, in case it doesn't fill the view.
+                        // Height comes from count because contentHeight lags behind inserted rows
+                        function loadMoreIfNearEnd() {
+                            const rowsHeight = Math.ceil(count / root.columns) * cellHeight;
+                            if (visible && count > 0 && contentY + height > rowsHeight - cellHeight * 2) WallpaperEngine.loadMore();
+                        }
+                        onContentYChanged: loadMoreIfNearEnd()
+                        onCountChanged: {
+                            if (currentIndex >= count) currentIndex = 0;
+                            loadMoreIfNearEnd();
+                        }
+
+                        function moveSelection(delta) {
+                            currentIndex = Math.max(0, Math.min(count - 1, currentIndex + delta));
+                            positionViewAtIndex(currentIndex, GridView.Contain);
+                        }
+
+                        function activateCurrent() {
+                            const item = WallpaperEngine.items[currentIndex];
+                            if (item) WallpaperEngine.select(item.id, root.useDarkMode);
+                        }
+
+                        // ScriptModel diffs the array, so appending a page inserts rows instead of
+                        // resetting the model (and the scroll position)
+                        model: ScriptModel {
+                            values: WallpaperEngine.items
+                        }
+                        delegate: WallpaperEngineItem {
+                            required property var modelData
+                            required property int index
+                            itemData: modelData
+                            width: workshopGrid.cellWidth
+                            height: workshopGrid.cellHeight
+                            readonly property bool isCurrentWallpaper: WallpaperEngine.downloadedFiles[modelData.id] === Config.options.background.wallpaperPath
+                            colBackground: (index === workshopGrid.currentIndex || containsMouse) ? Appearance.colors.colPrimary : isCurrentWallpaper ? Appearance.colors.colSecondaryContainer : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)
+                            colText: (index === workshopGrid.currentIndex || containsMouse) ? Appearance.colors.colOnPrimary : isCurrentWallpaper ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer0
+
+                            onEntered: workshopGrid.currentIndex = index
+                            onActivated: WallpaperEngine.select(modelData.id, root.useDarkMode)
+                            onCancelRequested: WallpaperEngine.cancel(modelData.id)
+                        }
+
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: gridDisplayRegion.width
+                                height: gridDisplayRegion.height
+                                radius: wallpaperGridBackground.radius
+                            }
+                        }
+                    }
+
+                    PagePlaceholder {
+                        shown: root.workshopMode && !WallpaperEngine.loading && WallpaperEngine.items.length === 0
+                        icon: WallpaperEngine.errorMessage.length > 0 ? "cloud_off" : "search_off"
+                        title: WallpaperEngine.errorMessage.length > 0 ? Translation.tr("Couldn't load the Workshop") : Translation.tr("Nothing found")
+                        description: WallpaperEngine.errorMessage
+                        shape: MaterialShape.Shape.Ghostish
+                        descriptionHorizontalAlignment: Text.AlignHCenter
+                    }
+
                     Row {
                         id: extraOptions
                         anchors {
@@ -370,7 +484,26 @@ MouseArea {
                                 }
                             }
 
+                            Repeater {
+                                model: root.workshopMode ? [
+                                    { sort: "trend", icon: "local_fire_department", tooltip: Translation.tr("Trending this week") },
+                                    { sort: "top", icon: "star", tooltip: Translation.tr("Top rated") },
+                                    { sort: "recent", icon: "schedule", tooltip: Translation.tr("Most recent") }
+                                ] : []
+                                delegate: IconToolbarButton {
+                                    required property var modelData
+                                    implicitWidth: height
+                                    toggled: WallpaperEngine.sort === modelData.sort
+                                    onClicked: WallpaperEngine.sort = modelData.sort
+                                    text: modelData.icon
+                                    StyledToolTip {
+                                        text: parent.modelData.tooltip
+                                    }
+                                }
+                            }
+
                             IconToolbarButton {
+                                visible: !root.workshopMode
                                 implicitWidth: height
                                 onClicked: {
                                     Wallpapers.randomFromCurrentFolder();
@@ -392,7 +525,7 @@ MouseArea {
 
                             ToolbarTextField {
                                 id: filterField
-                                placeholderText: focus ? Translation.tr("Search wallpapers") : Translation.tr("Hit \"/\" to search")
+                                placeholderText: focus ? (root.workshopMode ? Translation.tr("Search the Workshop") : Translation.tr("Search wallpapers")) : Translation.tr("Hit \"/\" to search")
 
                                 // Style
                                 clip: true
@@ -400,7 +533,8 @@ MouseArea {
 
                                 // Search
                                 onTextChanged: {
-                                    Wallpapers.searchQuery = text;
+                                    if (root.workshopMode) WallpaperEngine.searchQuery = text;
+                                    else Wallpapers.searchQuery = text;
                                 }
 
                                 Keys.onPressed: event => {
@@ -410,12 +544,12 @@ MouseArea {
                                     } else if (text.length !== 0) {
                                         // No filtering, just navigate grid
                                         if (event.key === Qt.Key_Down) {
-                                            grid.moveSelection(grid.columns);
+                                            root.activeGrid.moveSelection(root.columns);
                                             event.accepted = true;
                                             return;
                                         }
                                         if (event.key === Qt.Key_Up) {
-                                            grid.moveSelection(-grid.columns);
+                                            root.activeGrid.moveSelection(-root.columns);
                                             event.accepted = true;
                                             return;
                                         }

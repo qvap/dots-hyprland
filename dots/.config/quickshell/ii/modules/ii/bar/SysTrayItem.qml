@@ -9,7 +9,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 
-ButtonMouseArea {
+MouseArea {
     id: root
     required property SystemTrayItem item
     property bool targetMenuOpen: false
@@ -19,10 +19,8 @@ ButtonMouseArea {
 
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton
-    property real iconSize: 20
-    property real backgroundSize: 26
-    implicitWidth: iconSize
-    implicitHeight: iconSize
+    implicitWidth: 20
+    implicitHeight: 20
     onPressed: (event) => {
         switch (event.button) {
         case Qt.LeftButton:
@@ -40,16 +38,6 @@ ButtonMouseArea {
     }
     onEntered: {
         tooltip.text = TrayService.getTooltipForItem(root.item);
-    }
-
-    StateOverlay {
-        id: hoverOverlay
-        anchors.centerIn: parent
-        width: root.backgroundSize
-        height: root.backgroundSize
-        radius: root.backgroundSize / 2
-        hover: root.containsMouse
-        press: root.containsPress
     }
 
     Loader {
@@ -85,8 +73,8 @@ ButtonMouseArea {
         visible: !Config.options.tray.monochromeIcons
         source: root.item.icon
         anchors.centerIn: parent
-        width: root.iconSize
-        height: root.iconSize
+        width: parent.width
+        height: parent.height
     }
 
     Loader {

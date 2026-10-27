@@ -2,10 +2,13 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Bluetooth
 import Quickshell.Hyprland
 
@@ -44,6 +47,23 @@ Item {
         }
     }
 
+    Process {
+        id: fileChooser
+        command: ["kdialog", "--getopenfilename", Quickshell.env("HOME") + "/Pictures", "image/png image/jpg image/jpeg image/webp"]
+
+        stdout: StdioCollector {
+            id: fileChooserOutput
+        }
+
+        onExited: code => {
+            if (code === 0) {
+                const path = fileChooserOutput.text.trim();
+                if (path !== "")
+                    Config.options.sidebar.bannerImage = path;
+            }
+        }
+    }
+
     implicitHeight: sidebarRightBackground.implicitHeight
     implicitWidth: sidebarRightBackground.implicitWidth
 
@@ -66,12 +86,193 @@ Item {
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
 
-            SystemButtonRow {
-                Layout.fillHeight: false
+            Loader {
                 Layout.fillWidth: true
-                // Layout.margins: 10
-                Layout.topMargin: 5
-                Layout.bottomMargin: 0
+                Layout.fillHeight: false
+                sourceComponent: Config.options.sidebar.banner ? bannerComponent : normalComponent
+
+                Component {
+                    id: bannerComponent
+                    Item {
+                        implicitHeight: 180
+                        implicitWidth: parent?.width ?? 0
+
+                        Rectangle {
+                            id: sysRect
+                            anchors.fill: parent
+                            radius: Appearance.rounding.windowRounding - 2
+                            color: Appearance.colors.colLayer1
+
+                            Rectangle {
+                                id: wallpaperRect
+                                anchors {
+                                    top: parent.top
+                                    left: parent.left
+                                    right: parent.right
+                                    topMargin: 2
+                                    leftMargin: 2
+                                    rightMargin: 2
+                                }
+                                height: 120
+                                radius: sysRect.radius
+                                color: "transparent"
+
+                                StyledImage {
+                                    anchors.fill: parent
+                                    fillMode: Image.PreserveAspectCrop
+                                    source: Config.options.sidebar.bannerImage !== "" ? Config.options.sidebar.bannerImage : Config.options.background.wallpaperPath
+                                    cache: false
+                                    antialiasing: true
+                                    sourceSize.width: wallpaperRect.width * 2
+                                    sourceSize.height: wallpaperRect.height * 2
+                                    layer.enabled: true
+                                    layer.effect: OpacityMask {
+                                        maskSource: Rectangle {
+                                            width: wallpaperRect.width
+                                            height: wallpaperRect.height
+                                            radius: wallpaperRect.radius
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: event => {
+                                        if (event.button === Qt.LeftButton) {
+                                            fileChooser.running = true;
+                                            GlobalStates.sidebarRightOpen = false;
+                                        } else if (event.button === Qt.RightButton) {
+                                            Config.options.sidebar.bannerImage = "";
+                                        }
+                                    }
+                                }
+                            }
+
+                            Column {
+                                anchors {
+                                    left: parent.left
+                                    bottom: parent.bottom
+                                    leftMargin: 13
+                                    bottomMargin: 8
+                                }
+                                spacing: 1
+
+                                Rectangle {
+                                    id: avatarRect
+                                    width: 48
+                                    height: 48
+                                    radius: width / 2
+                                    color: Appearance.colors.colPrimaryContainer
+
+                                    Image {
+                                        id: avatarImage
+                                        anchors.fill: parent
+                                        source: "file://" + (Config.options.profile.avatarPicture || `${FileUtils.trimFileProtocol(Directories.home)}/.face`)
+                                        sourceSize.width: avatarImage.width * 2
+                                        sourceSize.height: avatarImage.height * 2
+                                        fillMode: Image.PreserveAspectCrop
+                                        layer.enabled: true
+                                        layer.effect: OpacityMask {
+                                            maskSource: Rectangle {
+                                                width: avatarRect.width
+                                                height: avatarRect.height
+                                                radius: avatarRect.radius
+                                            }
+                                        }
+                                        onStatusChanged: {
+                                            if (status === Image.Error)
+                                                visible = false;
+                                        }
+                                    }
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: "account_circle"
+                                        iconSize: 32
+                                        color: Appearance.colors.colOnPrimaryContainer
+                                        visible: avatarImage.status === Image.Error
+                                    }
+                                }
+
+                                StyledText {
+                                    text: (Config.options.profile.displayName === "" ? SystemInfo.username : Config.options.profile.displayName) + "@" + SystemInfo.hostname
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.DemiBold
+                                    color: Appearance.colors.colOnLayer1
+                                }
+
+                                StyledText {
+                                    text: Translation.tr("Up • %1").arg(DateTime.uptime)
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnLayer1
+                                    opacity: 0.6
+                                }
+                            }
+
+                            ButtonGroup {
+                                anchors {
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                    margins: 4
+                                }
+                                color: "transparent"
+                                padding: 4
+
+                                QuickToggleButton {
+                                    toggled: root.editMode
+                                    visible: Config.options.sidebar.quickToggles.style === "android"
+                                    buttonIcon: "edit"
+                                    onClicked: root.editMode = !root.editMode
+                                    StyledToolTip {
+                                        text: Translation.tr("Edit quick toggles") + (root.editMode ? Translation.tr("\nLMB to enable/disable\nRMB to toggle size\nScroll to swap position") : "")
+                                    }
+                                }
+                                QuickToggleButton {
+                                    toggled: false
+                                    buttonIcon: "restart_alt"
+                                    onClicked: {
+                                        Quickshell.execDetached(["hyprctl", "reload"]);
+                                        Quickshell.reload(true);
+                                    }
+                                    StyledToolTip {
+                                        text: Translation.tr("Reload Hyprland & Quickshell")
+                                    }
+                                }
+                                QuickToggleButton {
+                                    toggled: false
+                                    buttonIcon: "settings"
+                                    onClicked: {
+                                        GlobalStates.sidebarRightOpen = false;
+                                        Quickshell.execDetached(["qs", "-p", root.settingsQmlPath]);
+                                    }
+                                    StyledToolTip {
+                                        text: Translation.tr("Settings")
+                                    }
+                                }
+                                QuickToggleButton {
+                                    toggled: false
+                                    buttonIcon: "mode_off_on"
+                                    onClicked: GlobalStates.sessionOpen = true
+                                    StyledToolTip {
+                                        text: Translation.tr("Session")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Component {
+                    id: normalComponent
+                    SystemButtonRow {
+                        Layout.fillHeight: false
+                        Layout.fillWidth: true
+                        Layout.topMargin: 5
+                        Layout.bottomMargin: 0
+                    }
+                }
             }
 
             Loader {
@@ -79,9 +280,11 @@ Item {
                 Layout.fillWidth: true
                 visible: active
                 active: {
-                    const configQuickSliders = Config.options.sidebar.quickSliders
-                    if (!configQuickSliders.enable) return false
-                    if (!configQuickSliders.showMic && !configQuickSliders.showVolume && !configQuickSliders.showBrightness) return false;
+                    const configQuickSliders = Config.options.sidebar.quickSliders;
+                    if (!configQuickSliders.enable)
+                        return false;
+                    if (!configQuickSliders.showMic && !configQuickSliders.showVolume && !configQuickSliders.showBrightness)
+                        return false;
                     return true;
                 }
                 sourceComponent: QuickSliders {}
@@ -100,8 +303,10 @@ Item {
             }
 
             CenterWidgetGroup {
+                quietNotifs: root.editMode
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillHeight: true
+                Layout.minimumHeight: 46
                 Layout.fillWidth: true
             }
 
@@ -150,7 +355,8 @@ Item {
         shownPropertyString: "showWifiDialog"
         dialog: WifiDialog {}
         onShownChanged: {
-            if (!shown) return;
+            if (!shown)
+                return;
             Network.enableWifi();
             Network.rescanWifi();
         }
@@ -168,7 +374,8 @@ Item {
         readonly property bool shown: root[shownPropertyString]
         anchors.fill: parent
 
-        onShownChanged: if (shown) toggleDialogLoader.active = true;
+        onShownChanged: if (shown)
+            toggleDialogLoader.active = true
         active: shown
         onActiveChanged: {
             if (active) {
@@ -179,11 +386,12 @@ Item {
         Connections {
             target: toggleDialogLoader.item
             function onDismiss() {
-                toggleDialogLoader.item.show = false
+                toggleDialogLoader.item.show = false;
                 root[toggleDialogLoader.shownPropertyString] = false;
             }
             function onVisibleChanged() {
-                if (!toggleDialogLoader.item.visible && !root[toggleDialogLoader.shownPropertyString]) toggleDialogLoader.active = false;
+                if (!toggleDialogLoader.item.visible && !root[toggleDialogLoader.shownPropertyString])
+                    toggleDialogLoader.active = false;
             }
         }
     }
@@ -232,7 +440,7 @@ Item {
             radius: height / 2
             implicitWidth: uptimeRow.implicitWidth + 24
             implicitHeight: uptimeRow.implicitHeight + 8
-            
+
             Row {
                 id: uptimeRow
                 anchors.centerIn: parent
@@ -279,7 +487,7 @@ Item {
                 toggled: false
                 buttonIcon: "restart_alt"
                 onClicked: {
-                    Quickshell.execDetached(["hyprctl", "reload"])
+                    Quickshell.execDetached(["hyprctl", "reload"]);
                     Quickshell.reload(true);
                 }
                 StyledToolTip {

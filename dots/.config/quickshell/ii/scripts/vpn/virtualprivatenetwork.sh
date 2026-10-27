@@ -1,269 +1,628 @@
 #!/usr/bin/env bash
+# VPN backend for services/Vpn.qml (sidebar VPN toggle + dialog, vpnDetails.qml):
+# sing-box as the system unit `sing-box.service` (runs `sing-box -C
+# /etc/sing-box`, i.e. EVERY *.json in that directory is merged — config.json
+# must stay the only one). Nodes = the outbounds of the first `selector`
+# outbound, the active one = its `default`; subscriptions are parsed by
+# sub_parser.py. Nodes sing-box cannot carry (gRPC: Arch's sing-box has only
+# the "lite" transport, which Xray servers reject; XHTTP: no transport at all)
+# go to Xray (xray.service) behind keyed local shadowsocks-2022 ports
+# (xray_split.py); while there are any, xray.service starts / stops / restarts
+# with sing-box.
+# The configs hold the nodes' secrets: root:<unit user> 0640. What the shell
+# needs (nodes, types, the active one, whether Xray is in use, the applied
+# routing) is written next to them, secret-free, to
+# /etc/illogical-impulse/vpn/view.json (0644).
+# config.json = compose(base, routing, overlay) (routing.py): base = the
+# subscription's config (sub_parser + xray_split,
+# /etc/illogical-impulse/vpn/base.json, root 0600), routing =
+# Config.options.vpn.routing (direct / proxy / block rules by domain, IP,
+# process, protocol, geosite / geoip; FakeIP, remote DNS, Hysteria2 speeds),
+# overlay = the user's own sing-box JSON
+# (~/.config/illogical-impulse/vpn/custom.json), applied last. Root keeps
+# copies of the applied routing / overlay and the geosite / geoip rule-sets
+# (/etc/illogical-impulse/vpn/{routing,custom}.json, rules/), so a
+# subscription update or a node switch recomposes the same way.
+# Privileges: user halves run as the user (downloads, the overlay); root
+# halves (`_*`) via pkexec, which asks for the password. start / stop go
+# through systemd's polkit check (no prompt once `setup` installed its rule).
+# Deliberately NOT "pkexec this script without a password" (the old setup):
+# the script lives in a user-writable directory, so that rule handed root to
+# any program of the user. Every root half removes it.
+#
+#   state              one JSON line: { installed, unit (systemctl
+#                      is-active), enabled (autostart), online (a probe
+#                      through it answered), profile, profiles: [{ tag,
+#                      type (shown), base, xray, insecure }], subscription,
+#                      killswitch (on), blocking (its table is up while
+#                      sing-box is not), routing (the applied one),
+#                      customPending (the overlay differs from the applied
+#                      one), passwordless (the `setup` rule is installed) }
+#   start | stop | restart
+#                      systemctl start / stop / restart sing-box (+ xray)
+#   enable | disable   autostart at boot (systemctl enable / disable;
+#                      polkit always asks — unit files are not in the rule)
+#   killswitch on|off  (root) the kill switch: while it is on, starting
+#                      sing-box also raises ii-vpn-killswitch.service (a
+#                      drop-in `Wants=`), an nftables table that rejects all
+#                      outgoing traffic except loopback, the TUN, sing-box's
+#                      / Xray's own (by uid) and the LAN (DNS excepted). It
+#                      outlives a crashed sing-box: only `stop` takes it down
+#   select <tag>       (root) make <tag> the selector default, restart the
+#                      unit if it runs
+#   subscribe <url>    remember the URL (user state, 0600), download it as
+#                      the user, then (root) parse + check + install, restart
+#                      the unit if it runs
+#   update             subscribe again with the remembered URL
+#   unsubscribe        (root) stop the VPN, remove the URL, the configs and
+#                      the node list
+#   apply [json] [refresh]
+#                      routing (json = Config.options.vpn.routing; without
+#                      it the last one) + the overlay: validate, download the
+#                      geosite / geoip rule-sets it needs (as the user; older
+#                      than a day or `refresh` = again), then (root) compose,
+#                      check, install, restart; a config sing-box cannot start
+#                      with is rolled back
+#   edit               the overlay in $VISUAL / $EDITOR (a skeleton first)
+#   migrate            the old setup's state as one JSON line { routing,
+#                      overlay } (routing.py migrate of the old custom rules,
+#                      {} without them); its subscription URL moves to the
+#                      user state
+#   ping               latency of an HTTP probe: "OK:<ms>" / "ERR:"
+#   speedtest          speedtest-cli --simple (ERR_MISSING without it)
+#   setup              (root, once) polkit rule: the active local session of
+#                      the calling user may start / stop / restart
+#                      sing-box.service, xray.service and the kill switch
+#                      unit without a password
+# Errors: "ERR:<message>" and exit 1; a missing tool = "ERR:Can't find
+# dependency: <name>".
+set -u
 
-# ENTIRELY baked in Opus 4.8 — use this script on your own risk
+config=/etc/sing-box/config.json
+unit=sing-box
+xray_config=/etc/xray/config.json
+etc=/etc/illogical-impulse/vpn
+view=$etc/view.json
+probe=http://cp.cloudflare.com/generate_204
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/vpn
+sub_file=$state_dir/subscription
+routing_file=$state_dir/routing.json
+custom_file=${XDG_CONFIG_HOME:-$HOME/.config}/illogical-impulse/vpn/custom.json
+rules_cache=${XDG_CACHE_HOME:-$HOME/.cache}/quickshell/vpn/rules
+base=$etc/base.json
+routing_etc=$etc/routing.json
+custom_etc=$etc/custom.json
+rules_etc=$etc/rules
+rule=/etc/polkit-1/rules.d/50-ii-vpn.rules
+ks_unit=ii-vpn-killswitch
+ks_unit_file=/etc/systemd/system/$ks_unit.service
+ks_dropin=/etc/systemd/system/$unit.service.d/ii-vpn-killswitch.conf
+ks_rules=$etc/killswitch.nft
+ks_table="inet ii_vpn_killswitch"
+# sub_parser.py names the TUN this; the kill switch lets it through.
+tun_name=ii-tun
+# The old setup (a passwordless pkexec rule for this script, root-written
+# files): removed / migrated.
+old_rule=/etc/polkit-1/rules.d/50-vpn-virtualprivatenetwork.rules
+old_sub_url=/etc/sing-box/subscription_url
+old_sub_cache=/var/cache/illogical-impulse/sing-box/subscription_raw.txt
+old_rules=/etc/illogical-impulse/sing-box/custom_rules.json
+self=$(realpath "$0")
+here=$(dirname "$self")
 
-vpn() {
-    local config_path="/etc/sing-box/config.json"
+err() { echo "ERR:$*"; exit 1; }
 
-    _ok()   { echo "OK:$*"; }
-    _err()  { echo "ERR:$*"; }
-    _info() { echo "INFO:$*"; }
-    _wait() { echo "WAIT:$*"; }
-
-    local tool
-    for tool in jq curl python3 awk; do
-        if ! command -v "$tool" &>/dev/null; then
-            _err "Can't find dependency: ${tool}"
-            return 1
-        fi
-    done
-
-    if [[ $# -eq 0 ]]; then
-        vpn help
-        return 0
-    fi
-
-    local cmd="$1"
-    local needs_root=0
-    case "$cmd" in
-        start|stop|restart|kill|autostart|update|subscribe|update-sub|logs|check) needs_root=1 ;;
-        select) [[ -n "$2" ]] && needs_root=1 ;;
-    esac
-
-    if [[ $needs_root -eq 1 && $EUID -ne 0 ]]; then
-        exec pkexec "${BASH_SOURCE[0]}" "$@"
-    fi
-
-    if [[ $EUID -eq 0 ]]; then
-        pkexec() { "$@"; }
-
-        local script_path
-        script_path=$(realpath "${BASH_SOURCE[0]}")
-        local rule_file="/etc/polkit-1/rules.d/50-vpn-virtualprivatenetwork.rules"
-        if [[ ! -f "$rule_file" ]] || ! grep -qF "\"${script_path}\"" "$rule_file"; then
-            _info "Creating/updating polkit rule for passwordless execution..."
-            mkdir -p /etc/polkit-1/rules.d
-            cat <<EOF > "$rule_file"
-polkit.addRule(function(action, subject) {
-    if (action.id == "org.freedesktop.policykit.exec" &&
-        action.lookup("program") == "${script_path}") {
-        return polkit.Result.YES;
-    }
-});
-EOF
-            chmod 644 "$rule_file"
-            _ok "Polkit rule created/updated at ${rule_file}"
-        fi
-    fi
-
-    local node_filter='.type == "vless" or .type == "vmess" or .type == "trojan" or .type == "shadowsocks" or .type == "hysteria2" or .type == "hysteria" or .type == "tuic" or .type == "anytls" or .type == "socks" or .type == "http" or .type == "ssh"'
-
-    case "$cmd" in
-        start|stop|restart|kill)
-            _wait "${cmd^}ing sing-box"
-            pkexec systemctl "$cmd" sing-box && _ok "sing-box ${cmd}ed" || _err "Error ${cmd}ing"
-            ;;
-
-        autostart)
-            case "$2" in
-                on) pkexec systemctl enable sing-box && _ok "Autostart enabled" || _err "Error" ;;
-                off) pkexec systemctl disable sing-box && _ok "Autostart disabled" || _err "Error" ;;
-            esac
-            ;;
-
-        status)
-            local state active_name main_selector
-            state=$(systemctl is-active sing-box 2>/dev/null)
-
-            if [[ -r "$config_path" ]]; then
-                main_selector=$(jq -r '.outbounds[]? | select(.type == "selector") | .tag' "$config_path" 2>/dev/null | head -n 1)
-                if [[ -n "$main_selector" && "$main_selector" != "null" ]]; then
-                    active_name=$(jq -r --arg ms "$main_selector" '.outbounds[]? | select(.type == "selector" and .tag == $ms) | .default' "$config_path" 2>/dev/null)
-                else
-                    active_name=$(jq -r "(.outbounds[]?, .endpoints[]?) | select(${node_filter} or .type == \"wireguard\") | .tag" "$config_path" 2>/dev/null | head -n 1)
-                fi
-
-                if [[ "$state" == "active" ]]; then
-                    if ! curl -s -o /dev/null --connect-timeout 1 -m 1 http://cp.cloudflare.com/generate_204; then
-                        state="connecting"
-                    fi
-                fi
-
-                echo "STATUS:${state}"
-                if [[ -n "$active_name" && "$active_name" != "null" ]]; then
-                    echo "PROFILE:${active_name}"
-                else
-                    echo "PROFILE:None"
-                fi
-            else
-                echo "STATUS:${state}"
-                echo "PROFILE:None"
-            fi
-            ;;
-
-        logs)
-            if [[ "$2" == "new" || "$2" == "-f" ]]; then
-                pkexec journalctl -u sing-box --output cat -f
-            else
-                pkexec journalctl -u sing-box --output cat -e
-            fi
-            ;;
-
-        check)
-            _wait "Validating config.json..."
-            if pkexec sing-box check -c "$config_path"; then
-                _ok "Config is valid!"
-            else
-                _err "Config has errors! (Check the output above)"
-            fi
-            ;;
-
-        ping)
-            _wait "Checking connection latency..."
-            local ping_res
-            # Делаем запрос к Cloudflare, выводим полное время выполнения и переводим в миллисекунды через awk
-            ping_res=$(curl -s -o /dev/null -w "%{time_total}" --connect-timeout 5 http://cp.cloudflare.com/generate_204 | awk '{printf "%d", $1 * 1000}')
-            if [[ -n "$ping_res" && "$ping_res" != "0" ]]; then
-                _ok "${ping_res} ms"
-            else
-                _err "Timeout / No connection"
-            fi
-            ;;
-
-        speedtest)
-            if ! command -v speedtest-cli &>/dev/null; then
-                echo "ERR_MISSING"
-                return 0
-            fi
-            speedtest-cli --simple 2>/dev/null || echo "ERR_FAILED"
-            ;;
-
-        update-sub)
-            local sub_url
-            sub_url=$(pkexec cat /etc/sing-box/subscription_url 2>/dev/null)
-            if [[ -z "$sub_url" ]]; then
-                _err "URL подписки не найден."
-                return 1
-            fi
-            vpn subscribe "$sub_url"
-            ;;
-
-        subscribe)
-            if [[ $# -lt 2 ]]; then
-                _err "Usage: vpn subscribe <url> [--ipv4]"
-                return 1
-            fi
-
-            local sub_url="$2"
-
-            mkdir -p /etc/sing-box
-            rm -f /etc/sing-box/*.json
-            echo -n "$sub_url" | tee /etc/sing-box/subscription_url >/dev/null
-
-            local tmp_file="/tmp/vpn_sub_raw.txt"
-            local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-            local parser_file="$script_dir/sub_parser.py"
-
-            _wait "Downloading data..."
-            if ! curl -sL -m 15 -A "sing-box" "$sub_url" -o "$tmp_file"; then
-                _err "Failed to download subscription."
-                return 1
-            fi
-
-            _wait "Parsing and building modern config..."
-
-            # Launching parser as root: it overwrites config.json.
-            pkexec python3 "$parser_file" "$config_path" "$tmp_file"
-            local py_exit=$?
-
-            rm -f "$tmp_file"
-
-            if [[ $py_exit -ne 0 ]]; then
-                _err "Failed to parse nodes from subscription."
-                return 1
-            fi
-
-            pkexec chmod 644 "$config_path"
-
-            _wait "Restarting sing-box service..."
-            pkexec systemctl restart sing-box && _ok "Subscription applied successfully!" || _err "Error starting sing-box"
-            ;;
-
-        select)
-            if [[ ! -r "$config_path" ]]; then
-                _err "Config not readable. Run 'vpn update-sub'."
-                return 1
-            fi
-
-            local main_selector
-            main_selector=$(jq -r '.outbounds[]? | select(.type == "selector") | .tag' "$config_path" 2>/dev/null | head -n 1)
-
-            if [[ -z "$main_selector" ]]; then
-                _err "No selector group found in config"
-                return 1
-            fi
-
-            mapfile -t files < <(jq -r --arg ms "$main_selector" '.outbounds[] | select(.type == "selector" and .tag == $ms) | .outbounds[]' "$config_path" 2>/dev/null)
-
-            if [[ ${#files[@]} -eq 0 ]]; then
-                _err "No proxy profiles found"
-                return 1
-            fi
-
-            local active_name
-            active_name=$(jq -r --arg ms "$main_selector" '.outbounds[] | select(.type == "selector" and .tag == $ms) | .default' "$config_path" 2>/dev/null)
-            [[ -z "$active_name" || "$active_name" == "null" ]] && active_name="${files[0]}"
-
-            if [[ -n "$2" ]]; then
-                local idx="$2"
-                if [[ "$idx" =~ ^[0-9]+$ ]] && (( idx >= 1 && idx <= ${#files[@]} )); then
-                    local target_tag
-                    target_tag="${files[$((idx-1))]}"
-                    _wait "Selecting profile: $target_tag"
-
-                    pkexec bash -c "jq --arg tag \"$target_tag\" --arg ms \"$main_selector\" '( .outbounds[] | select(.type == \"selector\" and .tag == \$ms) | .default ) = \$tag' \"$config_path\" > /tmp/vpn_cfg.json && mv /tmp/vpn_cfg.json \"$config_path\" && chmod 644 \"$config_path\" && systemctl restart sing-box" || { _err "Failed to change profile"; return 1; }
-
-                    _ok "Profile changed to: $target_tag"
-                else
-                    _err "No profile with number ${idx}"
-                    return 1
-                fi
-                return 0
-            fi
-
-            local i name type
-            for i in "${!files[@]}"; do
-                name="${files[$i]}"
-                type=$(jq -r --arg tag "$name" '.outbounds[]? | select(.tag == $tag) | .type' "$config_path" 2>/dev/null | head -n 1)
-                [[ -z "$type" || "$type" == "null" ]] && type="unknown"
-                if [[ "$name" == "$active_name" ]]; then
-                    echo "PROFILE_ACTIVE:$((i+1)):${type}:${name}"
-                else
-                    echo "PROFILE_ITEM:$((i+1)):${type}:${name}"
-                fi
-            done
-            ;;
-
-        help|-h|--help)
-            echo "CMD:subscribe:<url>:download and generate config (Throne-style parsing)"
-            echo "CMD:update-sub::update existing subscription"
-            echo "CMD:select:[N]:select proxy node"
-            echo "CMD:status::current status"
-            echo "CMD:start::start sing-box"
-            echo "CMD:stop::stop sing-box"
-            echo "CMD:restart::restart sing-box"
-            echo "CMD:kill::force-kill sing-box"
-            echo "CMD:autostart:[on|off]:enable or disable autostart"
-            echo "CMD:check::validate config.json for syntax errors"
-            echo "CMD:ping::check current connection latency"
-            echo "CMD:logs:[new]:logs (new — real-time)"
-            echo "CMD:speedtest::run speed test"
-            ;;
-
-        *) _err "Invalid command. Try: vpn help"; return 1 ;;
-    esac
+# Xray carries some nodes (and is installed): it runs alongside sing-box.
+uses_xray() {
+    command -v xray >/dev/null || return 1
+    jq -e '.xray == true' "$view" >/dev/null 2>&1
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    vpn "$@"
-fi
+# Root: the unit's user / group (Arch runs sing-box as `sing-box`; root where
+# the unit has no User=).
+unit_user() {
+    local u
+    u=$(systemctl show -p User --value "$unit" 2>/dev/null)
+    echo "${u:-root}"
+}
+unit_group() {
+    getent group "$(unit_user)" >/dev/null && unit_user || echo root
+}
+
+# Root: every root half starts here; the old passwordless rule goes.
+root_only() {
+    [ "$(id -u)" -eq 0 ] || err "root only"
+    rm -f "$old_rule"
+}
+
+# The tools a command needs ("ERR:Can't find dependency: <name>").
+need() {
+    local t
+    for t in "$@"; do
+        command -v "$t" >/dev/null || err "Can't find dependency: $t"
+    done
+}
+
+# sha256 of a file, "" when missing.
+hash_of() {
+    [ -f "$1" ] && sha256sum <"$1" | cut -c1-64
+}
+
+# The panel's view of $config: { profile, profiles: [{ tag, type (shown),
+# base, xray, insecure }], xray, routing, customHash }. $1 = nodes moved to
+# Xray ("tag<TAB>type<TAB>flags" lines; empty file / none = none).
+view_of() {
+    local xn='{}' r='{}'
+    [ -s "${1:-}" ] && xn=$(jq -Rn '[inputs | split("\t") | select(length >= 2)
+        | { key: .[0], value: { base: .[1], insecure: ((.[2] // "") | contains("insecure")) } }] | from_entries' "$1")
+    [ -s "$routing_etc" ] && r=$(jq -c . "$routing_etc" 2>/dev/null || echo '{}')
+    jq -c --arg ms "$(selector)" --argjson xn "$xn" --argjson r "$r" --arg ch "$(hash_of "$custom_etc")" '
+        . as $c
+        | ([$c.outbounds[]?, $c.endpoints[]?] | map(select(.tag | type == "string") | { key: .tag, value: .type }) | from_entries) as $types
+        | ([$c.outbounds[]? | select(.type == "selector" and .tag == $ms)][0]) as $sel
+        | def node($t): ($xn[$t]) as $x
+            | if $x then { tag: $t, base: $x.base, xray: true, insecure: $x.insecure,
+                           type: ($x.base + " · xray" + (if $x.insecure then " · ⚠ cert checked" else "" end)) }
+              else { tag: $t, base: ($types[$t] // ""), xray: false, insecure: false, type: ($types[$t] // "") } end;
+        {
+            profile: (if $sel then ($sel.default // $sel.outbounds[0] // "") else "" end),
+            profiles: (if $sel then [$sel.outbounds[]? | node(.)] else [] end),
+            xray: ($xn != {}),
+            routing: $r,
+            customHash: $ch
+        }' "$config"
+}
+
+# Root: compose $config's content from base $1 (routing $2, overlay $3) into
+# $4, then `sing-box check` it. Prints ERR: and fails on either.
+compose() {
+    local out
+    out=$(python3 -I "$here/routing.py" compose "$1" "$2" "$3" "$rules_etc" "$4") || { echo "$out"; return 1; }
+    out=$(sing-box check -c "$4" 2>&1) ||
+        { echo "ERR:sing-box: $(printf '%s' "$out" | sed 's/\x1b\[[0-9;]*m//g' | tail -n 1)"; return 1; }
+}
+
+# Root: the rule-sets routing $1 needs, from the user's download dir $2
+# (regular .srs files only) to $rules_etc; ones no longer needed go.
+install_rules() {
+    local f rest keep=" "
+    mkdir -p "$rules_etc"
+    while IFS=$'\t' read -r f rest; do
+        keep="$keep$f "
+        [ -n "${2:-}" ] && [ -f "$2/$f" ] && [ ! -L "$2/$f" ] && [ "$(head -c3 "$2/$f")" = SRS ] &&
+            install -m 644 "$2/$f" "$rules_etc/$f"
+    done < <(python3 -I "$here/routing.py" rulesets "$1")
+    for f in "$rules_etc"/*.srs; do
+        [ -e "$f" ] && [ "${keep#* "${f##*/}" }" = "$keep" ] && rm -f "$f"
+    done
+    return 0
+}
+
+# User: download the rule-sets routing $1 needs to $rules_cache (each from
+# the first source that has it); ones younger than a day are kept unless $2.
+fetch_rules() {
+    local list line f u got
+    list=$(python3 -I "$here/routing.py" rulesets "$1") || err "${list#ERR:}"
+    [ -n "$list" ] || return 0
+    mkdir -p "$rules_cache"
+    while IFS= read -r line; do
+        IFS=$'\t' read -r -a parts <<<"$line"
+        f=${parts[0]}
+        [ -z "${2:-}" ] && [ -n "$(find "$rules_cache/$f" -mmin -1440 2>/dev/null)" ] && continue
+        got=""
+        for u in "${parts[@]:1}"; do
+            if curl -4 -sfL --connect-timeout 10 -m 120 "$u" -o "$rules_cache/$f.part" &&
+                [ "$(head -c3 "$rules_cache/$f.part")" = SRS ]; then
+                mv "$rules_cache/$f.part" "$rules_cache/$f"
+                got=1
+                break
+            fi
+        done
+        rm -f "$rules_cache/$f.part"
+        # A stale copy beats none (GitHub unreachable right now).
+        [ -n "$got" ] || [ -s "$rules_cache/$f" ] || err "cannot download ${f%.srs}"
+    done <<<"$list"
+}
+
+# Root: rewrite the view from $config. $1 = the Xray node list of a fresh
+# apply; without one the current view's is kept (a node switch).
+write_view() {
+    local nodes=${1:-} own="" tmp
+    if [ -z "$nodes" ] && [ -r "$view" ]; then
+        own=$(mktemp) || return 1
+        # (A view from before base / xray existed: parse the shown type.)
+        jq -r '.profiles[] | select(.xray // (.type | endswith(" · xray")))
+            | "\(.tag)\t\(.base // (.type | rtrimstr(" · xray")))\t\(if .insecure then "insecure" else "" end)"' "$view" >"$own"
+        nodes=$own
+    fi
+    tmp=$(mktemp) || return 1
+    local ok=0
+    view_of "$nodes" >"$tmp" && mkdir -p "$(dirname "$view")" && install -m 644 "$tmp" "$view" || ok=1
+    rm -f "$tmp" $own
+    return $ok
+}
+
+# Root: the polkit rule for user $1 (see `setup`).
+write_rule() {
+    mkdir -p "$(dirname "$rule")"
+    cat >"$rule" <<EOF
+// illogical-impulse VPN (virtualprivatenetwork.sh setup): ${1} may start / stop
+// ${unit}.service, xray.service and ${ks_unit}.service from the active local
+// session without a password.
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        ["${unit}.service", "xray.service", "${ks_unit}.service"].indexOf(action.lookup("unit")) >= 0 &&
+        ["start", "stop", "restart", "try-restart"].indexOf(action.lookup("verb")) >= 0 &&
+        subject.user == "${1}" && subject.local && subject.active)
+        return polkit.Result.YES;
+});
+EOF
+    chmod 644 "$rule"
+}
+
+# Root: the kill switch's ruleset — output only (this host's own traffic).
+# The VPN's own paths first, then the LAN minus DNS (the router would
+# forward the names to the ISP), then reject (fails fast instead of hanging).
+# `ct status dnat`: sing-box's auto_redirect sends TCP to its local port in
+# the nat output hook, and the filter hook still sees the pre-NAT interface.
+write_ks_rules() {
+    local uids
+    # (A sing-box running as root lets root's traffic through as well.)
+    uids=$(id -u "$(unit_user)") || return 1
+    id -u xray >/dev/null 2>&1 && uids="$uids, $(id -u xray)"
+    mkdir -p "$(dirname "$ks_rules")"
+    cat >"$ks_rules" <<EOF
+# illogical-impulse VPN kill switch (virtualprivatenetwork.sh), loaded by ${ks_unit}.service.
+table ${ks_table}
+delete table ${ks_table}
+table ${ks_table} {
+    chain output {
+        type filter hook output priority filter; policy accept;
+        oifname "lo" accept
+        oifname "${tun_name}" accept
+        meta skuid { ${uids} } accept
+        ct status dnat accept
+        meta l4proto { tcp, udp } th dport { 53, 853 } reject
+        ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 224.0.0.0/4, 255.255.255.255 } accept
+        ip6 daddr { fe80::/10, ff00::/8 } accept
+        meta l4proto tcp reject with tcp reset
+        reject with icmpx admin-prohibited
+    }
+}
+EOF
+    chmod 644 "$ks_rules"
+}
+
+ks_on() { [ -e "$ks_dropin" ]; }
+
+# Tag of the first selector outbound (empty = none).
+selector() {
+    jq -r '[.outbounds[]? | select(.type == "selector") | .tag][0] // empty' "$config" 2>/dev/null
+}
+
+case "${1:-}" in
+state | ping | speedtest | edit | migrate | "" | help | -h | --help) ;;
+*) need jq curl python3 sing-box systemctl ;;
+esac
+
+case "${1:-}" in
+state)
+    installed=false
+    command -v sing-box >/dev/null && installed=true
+    st=$(systemctl is-active "$unit" 2>/dev/null)
+    # Up only once both are: Xray down = its nodes are dead.
+    if [ "$st" = active ] && uses_xray && ! systemctl is-active -q xray; then
+        st=activating
+    fi
+    enabled=false
+    [ "$(systemctl is-enabled "$unit" 2>/dev/null)" = enabled ] && enabled=true
+    online=false
+    # IPv6 is broken on some hosts: -4.
+    if [ "$st" = active ] && curl -4 -s -o /dev/null --connect-timeout 1 -m 2 "$probe"; then
+        online=true
+    fi
+    sub=false
+    [ -s "$sub_file" ] && sub=true
+    ks=false
+    ks_on && ks=true
+    # Traffic held back: the table is up and sing-box is not (crashed,
+    # failed, stopped behind the shell's back).
+    blocking=false
+    if systemctl is-active -q "$ks_unit" && ! systemctl is-active -q "$unit"; then
+        blocking=true
+    fi
+    # The view; the old setup's world-readable config until the first apply.
+    v=""
+    if [ -r "$view" ]; then
+        v=$(cat "$view")
+    elif [ -r "$config" ]; then
+        v=$(view_of "")
+    fi
+    pwless=false
+    [ -e "$rule" ] && pwless=true
+    jq -nc --argjson v "${v:-{\}}" --arg unit "$st" --argjson enabled "$enabled" --argjson installed "$installed" \
+        --argjson online "$online" --argjson sub "$sub" --argjson ks "$ks" --argjson blocking "$blocking" \
+        --arg ch "$(hash_of "$custom_file")" --argjson pwless "$pwless" \
+        '{ installed: $installed, unit: $unit, enabled: $enabled, online: $online, subscription: $sub,
+        killswitch: $ks, blocking: $blocking, profile: ($v.profile // ""), profiles: ($v.profiles // []),
+        routing: ($v.routing // {}), customPending: ($ch != ($v.customHash // "")), passwordless: $pwless }'
+    ;;
+start | restart | enable | disable)
+    # Xray first: sing-box's shadowsocks outbounds point at it. The kill
+    # switch (if on) comes up with sing-box by itself (its drop-in).
+    if uses_xray; then
+        systemctl "$1" xray "$unit" || err "systemctl $1 failed"
+    else
+        systemctl "$1" "$unit" || err "systemctl $1 failed"
+    fi
+    ;;
+stop)
+    # Stop Xray too even if no node needs it any more. A deliberate stop is
+    # the one thing that lowers the kill switch (also after a crash).
+    units=("$unit")
+    systemctl is-active -q xray && units+=(xray)
+    systemctl is-active -q "$ks_unit" && units+=("$ks_unit")
+    systemctl stop "${units[@]}" || err "systemctl stop failed"
+    ;;
+killswitch)
+    case "${2:-}" in
+    on | off) ;;
+    *) err "usage: killswitch on|off" ;;
+    esac
+    exec pkexec "$self" _killswitch "$2" "$(id -un)"
+    ;;
+select)
+    [ -n "${2:-}" ] || err "usage: select <tag>"
+    exec pkexec "$self" _select "$2"
+    ;;
+subscribe)
+    url=${2:-}
+    case "$url" in
+    http://* | https://*) ;;
+    *) err "not an http(s) URL" ;;
+    esac
+    mkdir -p "$state_dir"
+    (umask 077 && printf '%s' "$url" >"$sub_file")
+    raw=$(mktemp) || err "mktemp"
+    trap 'rm -f "$raw"' EXIT
+    # Happ's user agent: panels answer it with the Xray JSON / share links
+    # sub_parser.py reads best.
+    curl -4 -sfL -m 20 -A "Happ/1.0" "$url" -o "$raw" || err "Failed to download subscription"
+    [ -s "$raw" ] || err "empty subscription"
+    # The applied routing's rule-sets, refreshed along with the nodes.
+    [ -s "$routing_etc" ] && fetch_rules "$routing_etc"
+    pkexec "$self" _apply "$raw" "$rules_cache"
+    ;;
+apply)
+    mkdir -p "$state_dir"
+    [ -n "${2:-}" ] && printf '%s\n' "$2" >"$routing_file"
+    [ -s "$routing_file" ] || echo '{}' >"$routing_file"
+    out=$(python3 -I "$here/routing.py" check "$routing_file" "$custom_file") || err "${out#ERR:}"
+    fetch_rules "$routing_file" "${3:-}"
+    exec pkexec "$self" _routing "$routing_file" "$custom_file" "$rules_cache"
+    ;;
+unsubscribe)
+    rm -f "$sub_file"
+    exec pkexec "$self" _unsubscribe
+    ;;
+migrate)
+    mkdir -p "$state_dir"
+    if [ ! -s "$sub_file" ] && [ -s "$old_sub_url" ] && [ -r "$old_sub_url" ]; then
+        (umask 077 && cat "$old_sub_url" >"$sub_file")
+    fi
+    if [ -r "$old_rules" ]; then
+        out=$(python3 -I "$here/routing.py" migrate "$old_rules") || err "${out#ERR:}"
+        echo "$out"
+    else
+        echo '{}'
+    fi
+    ;;
+edit)
+    if [ ! -e "$custom_file" ]; then
+        mkdir -p "$(dirname "$custom_file")"
+        # Merged over the generated config (routing.py): rules here go first.
+        printf '%s\n' '{' '  "route": { "rules": [] },' '  "dns": { "rules": [] }' '}' >"$custom_file"
+    fi
+    ed=${VISUAL:-${EDITOR:-}}
+    if [ -z "$ed" ]; then
+        for e in nvim vim nano vi; do
+            command -v "$e" >/dev/null && { ed=$e; break; }
+        done
+    fi
+    # shellcheck disable=SC2086 # "$EDITOR" may carry flags
+    exec $ed "$custom_file"
+    ;;
+update)
+    [ -s "$sub_file" ] || err "Subscription URL is not configured"
+    exec "$self" subscribe "$(cat "$sub_file")"
+    ;;
+ping)
+    t=$(curl -4 -s -o /dev/null -w '%{time_total}' --connect-timeout 5 -m 6 "$probe") || err "timeout"
+    echo "OK:$(awk -v t="$t" 'BEGIN { printf "%d", t * 1000 }')"
+    ;;
+speedtest)
+    command -v speedtest-cli >/dev/null || { echo ERR_MISSING; exit 1; }
+    speedtest-cli --simple 2>/dev/null || { echo ERR_FAILED; exit 1; }
+    ;;
+setup)
+    [ "$(id -u)" -eq 0 ] || exec pkexec "$self" setup "$(id -un)"
+    root_only
+    write_rule "${2:?user}"
+    echo "OK:$rule"
+    ;;
+
+# Root halves (pkexec) -------------------------------------------------------
+_select)
+    root_only
+    ms=$(selector)
+    [ -n "$ms" ] || err "no selector outbound in $config"
+    jq -e --arg ms "$ms" --arg tag "$2" \
+        '.outbounds[] | select(.type == "selector" and .tag == $ms) | .outbounds | index($tag) != null' \
+        "$config" >/dev/null || err "no node $2"
+    tmp=$(mktemp) || err "mktemp"
+    sel='(.outbounds[] | select(.type == "selector" and .tag == $ms) | .default) = $tag'
+    jq --arg ms "$ms" --arg tag "$2" "$sel" "$config" >"$tmp" || { rm -f "$tmp"; err "jq failed"; }
+    install -m 640 -g "$(unit_group)" "$tmp" "$config"
+    # The base too, or the next recompose would switch back.
+    if [ -f "$base" ]; then
+        jq --arg ms "$ms" --arg tag "$2" "$sel" "$base" >"$tmp" && install -m 600 "$tmp" "$base"
+    fi
+    rm -f "$tmp"
+    write_view || err "view update failed"
+    systemctl try-restart "$unit" || err "restart failed"
+    echo "OK:$2"
+    ;;
+_killswitch)
+    root_only
+    if [ "$2" = on ]; then
+        command -v nft >/dev/null || err "nft (nftables) is not installed"
+        write_ks_rules || err "no $unit user"
+        nft -c -f "$ks_rules" || err "nft rejected the kill switch rules"
+        cat >"$ks_unit_file" <<EOF
+# illogical-impulse VPN kill switch (virtualprivatenetwork.sh): pulled in by ${unit}.service,
+# stopped only by "vpn.sh stop" — it outlives a crashed sing-box.
+[Unit]
+Description=illogical-impulse VPN kill switch
+Before=${unit}.service xray.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nft -f ${ks_rules}
+ExecStop=-/usr/bin/nft delete table ${ks_table}
+EOF
+        mkdir -p "$(dirname "$ks_dropin")"
+        printf '[Unit]\nWants=%s.service\n' "$ks_unit" >"$ks_dropin"
+        # A config from before the TUN had a fixed name: name it, or the
+        # table would block the VPN's own interface.
+        if [ -r "$config" ] && ! jq -e --arg n "$tun_name" \
+            '[.inbounds[]? | select(.type == "tun")] | all(.interface_name == $n)' "$config" >/dev/null; then
+            tmp=$(mktemp) || err "mktemp"
+            jq --arg n "$tun_name" '(.inbounds[]? | select(.type == "tun") | .interface_name) = $n' "$config" >"$tmp" &&
+                sing-box check -c "$tmp" && install -m 640 -g "$(unit_group)" "$tmp" "$config"
+            rm -f "$tmp"
+            systemctl try-restart "$unit"
+        fi
+        # The password-free rule (if installed) learns the new unit.
+        [ -e "$rule" ] && [ -n "${3:-}" ] && write_rule "$3"
+        systemctl daemon-reload
+        if systemctl is-active -q "$unit"; then
+            systemctl start "$ks_unit" || err "kill switch failed to start"
+        fi
+    else
+        systemctl stop "$ks_unit" 2>/dev/null
+        rm -f "$ks_dropin"
+        rmdir "$(dirname "$ks_dropin")" 2>/dev/null
+        systemctl daemon-reload
+    fi
+    echo "OK:killswitch $2"
+    ;;
+_apply)
+    root_only
+    # Not *.json and not in /etc/sing-box: the unit merges every *.json there.
+    tmp=$(mktemp) || err "mktemp"
+    xtmp=$(mktemp) || err "mktemp"
+    ntmp=$(mktemp) || err "mktemp"
+    etmp=$(mktemp) || err "mktemp"
+    trap 'rm -f "$tmp" "$xtmp" "$ntmp" "$etmp"' EXIT
+    python3 -I "$here/sub_parser.py" "$tmp" "$2" "$etmp" || err "no nodes in the subscription"
+    # Keep the chosen node across an update (the parser defaults to the first,
+    # often a provider's placeholder) if the new subscription still has it.
+    keep=$([ -r "$config" ] && jq -r --arg ms "$(selector)" \
+        '[.outbounds[]? | select(.type == "selector" and .tag == $ms) | .default][0] // empty' "$config")
+    if [ -n "$keep" ]; then
+        jq --arg tag "$keep" '(.outbounds[] | select(.type == "selector" and (.outbounds | index($tag) != null)) | .default) = $tag' \
+            "$tmp" >"$tmp.keep" && mv "$tmp.keep" "$tmp"
+    fi
+    # gRPC / XHTTP nodes to Xray (only when it is installed).
+    if xuid=$(id -u xray 2>/dev/null) && command -v xray >/dev/null; then
+        python3 -I "$here/xray_split.py" "$tmp" "$xtmp" "$ntmp" "$xuid" "$etmp" || err "xray split failed"
+    fi
+    sing-box check -c "$tmp" || err "sing-box rejected the generated config"
+    # $tmp = the new base; the config = it + the applied routing / overlay.
+    install_rules "$routing_etc" "${3:-}"
+    ctmp=$(mktemp) || err "mktemp"
+    trap 'rm -f "$tmp" "$xtmp" "$ntmp" "$etmp" "$ctmp"' EXIT
+    out=$(compose "$tmp" "$routing_etc" "$custom_etc" "$ctmp") || err "${out#ERR:}"
+    if [ -s "$ntmp" ]; then
+        # Format by extension otherwise, and mktemp names have none.
+        out=$(xray run -test -format json -config "$xtmp" 2>&1) ||
+            err "xray rejected the generated config: $(printf '%s' "$out" | grep -v 'Reading config' | tail -n 1)"
+    fi
+    mkdir -p "$(dirname "$config")"
+    # Backups hold the same secrets: root only.
+    [ -f "$config" ] && install -m 600 "$config" "$config.bak"
+    mkdir -p "$(dirname "$base")"
+    install -m 600 "$tmp" "$base"
+    install -m 640 -g "$(unit_group)" "$ctmp" "$config"
+    if [ -s "$ntmp" ]; then
+        mkdir -p "$(dirname "$xray_config")"
+        [ -f "$xray_config" ] && install -m 600 "$xray_config" "$xray_config.bak"
+        install -m 640 -g xray "$xtmp" "$xray_config"
+    fi
+    write_view "$ntmp" || err "view update failed"
+    if systemctl is-active -q "$unit"; then
+        if [ -s "$ntmp" ]; then
+            systemctl restart xray || err "xray restart failed"
+        else
+            systemctl stop xray
+        fi
+    fi
+    systemctl try-restart "$unit" || err "restart failed"
+    echo "OK:applied"
+    ;;
+_unsubscribe)
+    root_only
+    units=("$unit")
+    systemctl is-active -q xray && units+=(xray)
+    systemctl is-active -q "$ks_unit" && units+=("$ks_unit")
+    systemctl stop "${units[@]}" 2>/dev/null
+    rm -f "$config" "$config.bak" "$base" "$view" "$xray_config" "$xray_config.bak" \
+        "$old_sub_url" "$old_sub_cache"
+    echo "OK:Subscription deleted and profiles cleared"
+    ;;
+_routing)
+    root_only
+    # $2 routing, $3 overlay (may be missing), $4 rule-set downloads — the
+    # user's files: regular files only.
+    for f in "$2" "$3"; do
+        [ ! -L "$f" ] || err "$f is a symlink"
+    done
+    out=$(python3 -I "$here/routing.py" check "$2" "$3") || err "${out#ERR:}"
+    # Before the base existed the config was one (nothing composed in yet).
+    b=$base
+    [ -f "$b" ] || b=$config
+    [ -f "$b" ] || err "no config yet: import a subscription first"
+    install_rules "$2" "$4"
+    ctmp=$(mktemp) || err "mktemp"
+    trap 'rm -f "$ctmp"' EXIT
+    out=$(compose "$b" "$2" "$3" "$ctmp") || err "${out#ERR:}"
+    mkdir -p "$(dirname "$base")"
+    [ -f "$base" ] || install -m 600 "$config" "$base"
+    [ -f "$config" ] && install -m 600 "$config" "$config.bak"
+    install -m 640 -g "$(unit_group)" "$ctmp" "$config"
+    # Restart and make sure it stays up: what `check` cannot see fails only
+    # at start. If it does not come up, the previous config goes back (and
+    # the copies below stay the old ones, so the change is still pending).
+    if systemctl is-active -q "$unit"; then
+        systemctl restart "$unit" || err "restart failed"
+        sleep 3
+        if ! systemctl is-active -q "$unit"; then
+            why=$(journalctl -u "$unit" -n 20 -o cat --since "-10s" 2>/dev/null | grep -iE 'fatal|error' | tail -n 1 |
+                sed 's/\x1b\[[0-9;]*m//g')
+            install -m 640 -g "$(unit_group)" "$config.bak" "$config"
+            systemctl restart "$unit"
+            err "sing-box did not start with it, previous config restored${why:+: $why}"
+        fi
+    fi
+    install -m 644 "$2" "$routing_etc"
+    # The overlay may name its own servers / keys: root only.
+    if [ -f "$3" ]; then install -m 600 "$3" "$custom_etc"; else rm -f "$custom_etc"; fi
+    write_view || err "view update failed"
+    echo "OK:routing applied"
+    ;;
+*)
+    sed -n '2,/^set -u$/{/^set -u$/!p}' "$self"
+    exit 2
+    ;;
+esac

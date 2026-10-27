@@ -187,10 +187,7 @@ PopupWindow {
             Layout.fillWidth: true
 
             visible: root.trayItemId !== undefined && root.trayItemId.length > 0 && stackView.depth === 1
-            releaseAction: () => {
-                GlobalFocusGrab.dismiss();
-                TrayService.togglePin(root.trayItemId);
-            }
+            releaseAction: () => TrayService.togglePin(root.trayItemId);
 
             contentItem: RowLayout {
                 anchors {

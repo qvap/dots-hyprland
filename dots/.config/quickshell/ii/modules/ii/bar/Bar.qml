@@ -36,29 +36,105 @@ Scope {
                     interval: (Config?.options.bar.autoHide.showWhenPressingSuper.delay ?? 100)
                     repeat: false
                     onTriggered: {
-                        barRoot.superShow = true
+                        barRoot.superShow = true;
                     }
                 }
                 Connections {
                     target: GlobalStates
                     function onSuperDownChanged() {
-                        if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable) return;
-                        if (GlobalStates.superDown) showBarTimer.restart();
+                        if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
+                            return;
+                        if (GlobalStates.superDown)
+                            showBarTimer.restart();
                         else {
                             showBarTimer.stop();
                             barRoot.superShow = false;
                         }
                     }
                 }
+
+                property bool showCorners: !Config.options.bar.autoHide.enable || mustShow
+
+                Timer {
+                    id: cornerRevealTimer
+                    interval: 65
+                    onTriggered: barRoot.showCorners = true
+                }
+
+                onMustShowChanged: {
+                    if (!Config.options.bar.autoHide.enable)
+                        return;
+                    if (mustShow) {
+                        cornerRevealTimer.restart();
+                    } else {
+                        cornerRevealTimer.stop();
+                        barRoot.showCorners = false;
+                    }
+                }
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow
+                readonly property bool morphInteracting: morphRegistry.interacting
+                readonly property bool hasMorphingMedia: [Config.options.bar.layouts.leftLayout,
+                    Config.options.bar.layouts.middleLayout, Config.options.bar.layouts.rightLayout]
+                    .some(layout => layout.includes("media"))
+                readonly property BarMorphRegistry morphRegistry: BarMorphRegistry {}
+                property alias morphOverlay: morphOverlayLayer
+                readonly property bool morphExpanded: morphRegistry.expanded
+                onMorphExpandedChanged: {
+                    if (morphExpanded) GlobalFocusGrab.addDismissable(barRoot);
+                    else GlobalFocusGrab.removeDismissable(barRoot);
+                }
+                function close() {
+                    morphRegistry.collapseAll(null);
+                }
+                // Allocate the animation's extent once; keep the visual bar and exclusive zone at the edge.
+                Item { id: morphOverlayLayer; anchors.fill: parent; z: 100 }
+
+                property bool mustShow: hoverRegion.containsMouse || superShow || morphInteracting
+                property var thisMonitorData: HyprlandData.monitors.find(m => m.name === barRoot.screen?.name)
+                property bool monitorHasFullscreen: HyprlandData.workspaceById[thisMonitorData?.activeWorkspace?.id]?.hasfullscreen ?? false
+                property bool monitorHasSpecialOpen: (thisMonitorData?.specialWorkspace?.name ?? "") !== ""
                 exclusionMode: ExclusionMode.Ignore
-                exclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 :
-                    Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                property int normalExclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 : Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0) + (Config.options.bar.cornerStyle === 2 ? -6 : 0) + (Config.options.bar.cornerStyle === 3 ? (10 - Appearance.sizes.hyprlandGapsOut) : 0)
+
+                exclusiveZone: (barContent.centerOnly && Config.options.bar.centerOnlyReserveFrame) ? Config.options.bar.frameThickness : normalExclusiveZone
                 WlrLayershell.namespace: "quickshell:bar"
-                implicitHeight: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+                // Overlay layer only while special workspace sits on top of a fullscreen window on this monitor,
+                // else Top layer so fullscreen apps cover the bar as normal (Hyprland buries Top layer under fullscreen+special).
+                WlrLayershell.layer: (monitorHasFullscreen && monitorHasSpecialOpen) ? WlrLayer.Overlay : WlrLayer.Top
+                implicitHeight: hasMorphingMedia ? Math.min(screen.height, Appearance.sizes.barHeight + Appearance.sizes.mediaControlsHeight + 32)
+                    : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
+                // When Overlay-layer, bar shares a layer with the screen-corner click zones (ScreenCorners.qml)
+                // and same-layer overlap is resolved by stacking, not layer priority - bar was winning and
+                // swallowing the tiny corner-open hit rects. Carve them out of the bar's own mask so clicks
+                // reach the corners underneath. Only relevant on the edge the bar and corners share.
+                property bool cutOutCornerOpenZones: (monitorHasFullscreen && monitorHasSpecialOpen) && (Config.options.bar.bottom === Config.options.sidebar.cornerOpen.bottom)
+                property int cornerOpenCutWidth: cutOutCornerOpenZones ? Config.options.sidebar.cornerOpen.cornerRegionWidth : 0
+                property int cornerOpenCutHeight: cutOutCornerOpenZones ? Config.options.sidebar.cornerOpen.cornerRegionHeight : 0
                 mask: Region {
                     item: hoverMaskRegion
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.morphRegistry.active?.pullSurface ?? null
+                    }
+                    Region {
+                        intersection: Intersection.Combine
+                        item: barRoot.morphRegistry.active?.expandedSurface ?? null
+                        radius: barRoot.morphRegistry.active?.expandedSurface?.radius ?? 0
+                    }
+                    Region {
+                        intersection: Intersection.Subtract
+                        x: 0
+                        y: Config.options.bar.bottom ? (barRoot.height - barRoot.cornerOpenCutHeight) : 0
+                        width: barRoot.cornerOpenCutWidth
+                        height: barRoot.cornerOpenCutHeight
+                    }
+                    Region {
+                        intersection: Intersection.Subtract
+                        x: barRoot.width - barRoot.cornerOpenCutWidth
+                        y: Config.options.bar.bottom ? (barRoot.height - barRoot.cornerOpenCutHeight) : 0
+                        width: barRoot.cornerOpenCutWidth
+                        height: barRoot.cornerOpenCutHeight
+                    }
                 }
                 color: "transparent"
 
@@ -71,8 +147,8 @@ Scope {
                 }
 
                 margins {
-                    right: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.right) * -1
-                    bottom: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.bottom) * -1
+                    right: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.right) ? -1 : 0
+                    bottom: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.bottom) ? -1 : 0
                 }
 
                 // Include in focus grab
@@ -81,9 +157,10 @@ Scope {
                 }
                 Component.onDestruction: {
                     GlobalFocusGrab.removePersistent(barRoot);
+                    GlobalFocusGrab.removeDismissable(barRoot);
                 }
 
-                MouseArea  {
+                MouseArea {
                     id: hoverRegion
                     hoverEnabled: true
                     anchors {
@@ -95,22 +172,35 @@ Scope {
                     Item {
                         id: hoverMaskRegion
                         anchors {
-                            fill: barContent
-                            topMargin: -Config.options.bar.autoHide.hoverRegionWidth
-                            bottomMargin: -Config.options.bar.autoHide.hoverRegionWidth
+                            left: parent.left
+                            right: parent.right
+                            top: !Config.options.bar.bottom ? parent.top : undefined
+                            bottom: Config.options.bar.bottom ? parent.bottom : undefined
+                        }
+
+                        height: {
+                            if (!Config?.options?.bar?.autoHide?.enable) {
+                                return barContent.height + (Config.options.bar.cornerStyle === 3 ? 10 : 0);
+                            }
+
+                            const triggerWidth = Config?.options?.bar?.autoHide?.hoverRegionWidth ?? 5;
+
+                            const visibleContentHeight = !Config.options.bar.bottom ? (barContent.y + barContent.height) : (parent.height - barContent.y);
+
+                            return Math.max(triggerWidth, visibleContentHeight);
                         }
                     }
 
                     BarContent {
                         id: barContent
-                        
+
                         implicitHeight: Appearance.sizes.barHeight
                         anchors {
                             right: parent.right
                             left: parent.left
                             top: parent.top
                             bottom: undefined
-                            topMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                            topMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : (Config.options.bar.cornerStyle === 3 ? 5 : 0)
                             bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.bottom) * -1
                             rightMargin: (Config.options.interactions.deadPixelWorkaround.enable && barRoot.anchors.right) * -1
                         }
@@ -136,7 +226,7 @@ Scope {
                             PropertyChanges {
                                 target: barContent
                                 anchors.topMargin: 0
-                                anchors.bottomMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                                anchors.bottomMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : (Config.options.bar.cornerStyle === 3 ? 5 : 0)
                             }
                         }
                     }
@@ -151,7 +241,7 @@ Scope {
                             bottom: undefined
                         }
                         height: Appearance.rounding.screenRounding
-                        active: showBarBackground && Config.options.bar.cornerStyle === 0 // Hug
+                        active: showBarBackground && Config.options.bar.cornerStyle === 0 && !barContent.centerOnly// Hug
 
                         states: State {
                             name: "bottom"
@@ -169,6 +259,9 @@ Scope {
 
                         sourceComponent: Item {
                             implicitHeight: Appearance.rounding.screenRounding
+
+                            readonly property color decoratorColor: showBarBackground ? (Config.options.bar.followFrameColor && Config.options.bar.frameColor ? Appearance.getColorFromName(Config.options.bar.frameColor) : Appearance.colors.colLayer0) : "transparent"
+
                             RoundCorner {
                                 id: leftCorner
                                 anchors {
@@ -178,7 +271,7 @@ Scope {
                                 }
 
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: showBarBackground ? Appearance.colors.colLayer0 : "transparent"
+                                color: parent.decoratorColor
 
                                 corner: RoundCorner.CornerEnum.TopLeft
                                 states: State {
@@ -197,7 +290,7 @@ Scope {
                                     bottom: Config.options.bar.bottom ? parent.bottom : undefined
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: showBarBackground ? Appearance.colors.colLayer0 : "transparent"
+                                color: parent.decoratorColor
 
                                 corner: RoundCorner.CornerEnum.TopRight
                                 states: State {
@@ -219,19 +312,19 @@ Scope {
         target: "bar"
 
         function toggle(): void {
-            GlobalStates.barOpen = !GlobalStates.barOpen
+            GlobalStates.barOpen = !GlobalStates.barOpen;
         }
 
         function close(): void {
-            GlobalStates.barOpen = false
+            GlobalStates.barOpen = false;
         }
 
         function open(): void {
-            GlobalStates.barOpen = true
+            GlobalStates.barOpen = true;
         }
     }
 
-    GlobalShortcut {
+    CompositorGlobalShortcut {
         name: "barToggle"
         description: "Toggles bar on press"
 
@@ -240,7 +333,7 @@ Scope {
         }
     }
 
-    GlobalShortcut {
+    CompositorGlobalShortcut {
         name: "barOpen"
         description: "Opens bar on press"
 
@@ -249,7 +342,7 @@ Scope {
         }
     }
 
-    GlobalShortcut {
+    CompositorGlobalShortcut {
         name: "barClose"
         description: "Closes bar on press"
 

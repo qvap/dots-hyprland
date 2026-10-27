@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -14,7 +16,13 @@ import qs.services
 WindowDialog {
     id: root
 
+    property string detailsQmlPath: Quickshell.shellPath("vpnDetails.qml")
+
     backgroundHeight: 600
+
+    Component.onCompleted: Vpn.refresh()
+    onShowChanged: if (show)
+        Vpn.refresh()
 
     WindowDialogTitle {
         text: Translation.tr("VPN Connections")
@@ -125,7 +133,7 @@ WindowDialog {
                         const progressSecondHalf = Math.max(vpnCookie.leapZoomProgress - 0.5, 0) * 2;
                         return vpnCookie.baseShapeSize + leapZoomDiff * progressFirstHalf - leapZoomDiff * progressSecondHalf;
                     }
-                    color: (Vpn.status === "active" || Vpn.status === "connecting") ? (vpnMouseArea.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer) : (vpnMouseArea.containsMouse ? Appearance.colors.colLayer3Hover : ColorUtils.transparentize(Appearance.colors.colLayer3))
+                    color: Vpn.on ? (vpnMouseArea.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer) : (vpnMouseArea.containsMouse ? Appearance.colors.colLayer3Hover : ColorUtils.transparentize(Appearance.colors.colLayer3))
 
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(shape)
@@ -139,7 +147,7 @@ WindowDialog {
                 anchors.centerIn: parent
                 text: "power_settings_new"
                 iconSize: 42
-                color: (Vpn.status === "active" || Vpn.status === "connecting") ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+                color: Vpn.on ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
             }
 
             ButtonMouseArea {
@@ -153,16 +161,69 @@ WindowDialog {
 
         StyledText {
             Layout.alignment: Qt.AlignHCenter
-            text: {
-                if (Vpn.status === "active")
-                    return Translation.tr("Connected");
-                if (Vpn.status === "connecting")
-                    return Translation.tr("Connecting");
-                return Translation.tr("Disconnected");
-            }
+            text: Vpn.statusText
             font.pixelSize: Appearance.font.pixelSize.huge
             font.weight: 600
             color: Appearance.colors.colOnLayer0
+        }
+    }
+
+    ColumnLayout {
+        visible: Vpn.needsSubscription && Vpn.profiles.length === 0
+        Layout.fillWidth: true
+        Layout.bottomMargin: 8
+        spacing: 8
+
+        StyledText {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: Appearance.colors.colSubtext
+            text: Vpn.subscriptionStatus.length > 0 ? Vpn.subscriptionStatus : Translation.tr("Enter subscription URL to continue.")
+        }
+
+        MaterialTextField {
+            id: subscriptionField
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Subscription URL")
+            text: Vpn.subscriptionUrl
+            onAccepted: Vpn.subscribe(text)
+        }
+
+        StyledButton {
+            Layout.fillWidth: true
+            text: Vpn.isScanning ? Translation.tr("Loading...") : Translation.tr("Load subscription")
+            enabled: !Vpn.isScanning
+            onClicked: Vpn.subscribe(subscriptionField.text)
+        }
+    }
+
+    // The kill switch holds traffic back (sing-box died): let it out again
+    NoticeBox {
+        visible: Vpn.blocking
+        Layout.fillWidth: true
+        Layout.bottomMargin: 6
+        materialIcon: "gpp_bad"
+        text: Translation.tr("The VPN is down and the kill switch blocks all traffic.")
+
+        StyledButton {
+            text: Translation.tr("Release block")
+            enabled: Vpn.busy === ""
+            onClicked: Vpn.release()
+        }
+    }
+
+    // Routing / the overlay changed since the last apply
+    NoticeBox {
+        visible: Vpn.pending
+        Layout.fillWidth: true
+        Layout.bottomMargin: 6
+        materialIcon: "alt_route"
+        text: Translation.tr("Routing changes are not applied yet.")
+
+        StyledButton {
+            text: Vpn.isRoutingBusy ? Translation.tr("Applying...") : Translation.tr("Apply")
+            enabled: Vpn.busy === ""
+            onClicked: Vpn.applyRouting(false)
         }
     }
 
@@ -180,7 +241,8 @@ WindowDialog {
         delegate: ItemDelegate {
             id: profileDelegate
             width: profileSelector.width
-            highlighted: profileSelector.highlightedIndex === index
+            highlighted: profileSelector.highlightedIndex === profileDelegate.index
+            required property int index
             required property var modelData
             property string profileType: modelData?.type ?? ""
             property string profileName: modelData?.name ?? ""
@@ -222,10 +284,8 @@ WindowDialog {
         currentIndex: Vpn.profiles.findIndex(item => item.isActive)
         onActivated: index => {
             const profile = Vpn.profiles[index];
-            if (profile && !profile.isActive) {
-                const profileIndex = profile.index !== undefined ? profile.index : index;
-                Vpn.selectProfile(profileIndex);
-            }
+            if (profile && !profile.isActive)
+                Vpn.selectProfile(profile.tag);
         }
     }
 
@@ -255,9 +315,11 @@ WindowDialog {
         Layout.fillWidth: true
 
         DialogButton {
-            buttonText: Translation.tr("Update subscription")
+            buttonText: Translation.tr("Details")
             onClicked: {
-                Vpn.updateSubscription();
+                root.dismiss();
+                GlobalStates.sidebarRightOpen = false;
+                Quickshell.execDetached(["qs", "-p", root.detailsQmlPath]);
             }
         }
 

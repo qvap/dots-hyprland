@@ -6,6 +6,16 @@ hl.window_rule({match = {class = "^()$", title = "^()$" },                   no_
 -- Disable blur for every window
 hl.window_rule({match = {class = ".*" }, no_blur = true })
 
+-- Transparency
+hl.window_rule({ match = { class = "kitty" }, opacity = "0.9 override" })
+-- Keep maximized windows transparent; only true fullscreen is opaque.
+hl.window_rule({ match = { fullscreen_state_internal = 2 }, opacity = "1" })
+
+-- Per needed window transparency
+hl.window_rule({ match = { class = "zen" }, no_blur = false })
+hl.window_rule({ match = { class = "dev.zed.*" }, no_blur = false })
+hl.window_rule({ match = { class = "kitty" }, no_blur = false })
+
 -- Floating
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      center = true})
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      float = true})
@@ -47,6 +57,55 @@ hl.window_rule({match = {class = "org.freedesktop.impl.portal.desktop.kde" }, fl
 hl.window_rule({match = {class = "org.freedesktop.impl.portal.desktop.kde" }, size = {"(monitor_w*0.60)", "(monitor_h*0.65)"} })
 hl.window_rule({match = {class = "^(Zotero)$" },                             float = true})
 hl.window_rule({match = {class = "^(Zotero)$" },                             size = {"(monitor_w*0.45)", "(monitor_h*0.45)"} })
+
+-- File Manager
+hl.window_rule({
+    match = { class = "org.kde.dolphin" },
+    float = true,
+    size = { "(monitor_w*0.75)", "(monitor_h*0.75)" },
+    center = true
+})
+-- Ark (zip extractor)
+hl.window_rule({
+    match = { class = "org.kde.ark" },
+    float = true,
+    size = { "(monitor_w*0.75)", "(monitor_h*0.75)" },
+    center = true
+})
+
+-- mpv
+hl.window_rule({
+    match = { class = "mpv" },
+    float = true,
+    size = { "(monitor_w*0.75)", "(monitor_h*0.75)" },
+    center = true
+})
+--shelly
+hl.window_rule({
+    match = { class = "com.shellyorg.shelly" },
+    float = true,
+    size = { "(monitor_w*0.75)", "(monitor_h*0.75)" },
+    center = true
+})
+--Blender related
+hl.window_rule({
+    match = { title = "Blender File View" },
+    float = true,
+    size = { "(monitor_w*0.75)", "(monitor_h*0.75)" },
+    center = true
+})
+
+--all of the winboat windows
+hl.window_rule({
+    match = { class = "xfreerdp" },
+    float = true
+})
+hl.window_rule({
+    match = { class = "winboat-*" },
+    float = true
+})
+-- CUSTOM MODS
+hl.window_rule({ match = { title = "^(illogical-impulse VPN Details)$" }, float = true })
 
 -- Move
 -- kde-material-you-colors spawns a window when changing dark/light theme. This is to make sure it doesn't interfere at all.
@@ -141,7 +200,8 @@ hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim =
 hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 1})
-hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = true})
+-- Overview anim
+hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = false, animation = "popin 90%" })
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:polkit" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:popup" }, xray = false}) -- No weird color for bar tooltips (this in theory should suffice)

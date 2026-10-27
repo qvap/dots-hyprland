@@ -6,15 +6,11 @@ import qs.modules.common.widgets
 
 QuickToggleModel {
     name: Translation.tr("VPN")
-    statusText: {
-        if (Vpn.status === "active") return Translation.tr("Connected");
-        if (Vpn.status === "connecting") return Translation.tr("Connecting");
-        return Translation.tr("Disconnected");
-    }
+    statusText: Vpn.statusText
     tooltipText: Translation.tr("VPN | Right-click to configure")
     icon: "vpn_key"
 
-    toggled: Vpn.status === "active" || Vpn.status === "connecting"
+    toggled: Vpn.on
     mainAction: () => Vpn.toggle()
     hasMenu: true
 }
