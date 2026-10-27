@@ -17,8 +17,8 @@ AbstractBackgroundWidget {
     readonly property real singleWidth: 132
     readonly property real cardHeight: 120
 
-    readonly property real snapWidth1: singleWidth            
-    readonly property real snapWidth2: singleWidth * 2 + cardSpacing  
+    readonly property real snapWidth1: singleWidth
+    readonly property real snapWidth2: singleWidth * 2 + cardSpacing
     readonly property real snapWidth3: singleWidth * 3 + cardSpacing * 2
 
     property string sizeMode: root.configEntry.sizeMode ?? "2x2"
@@ -247,7 +247,7 @@ AbstractBackgroundWidget {
                             implicitHeight: 20
                             StyledText {
                                 anchors.centerIn: parent
-                                text: modelData
+                                text: Translation.tr(modelData)
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.weight: Font.Bold
                                 color: Appearance.colors.colOnPrimaryContainer
