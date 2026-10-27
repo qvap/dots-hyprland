@@ -1,3 +1,4 @@
+import qs.modules.common.widgets
 import qs
 import qs.services
 import qs.modules.common
@@ -22,6 +23,8 @@ Scope {
         exclusiveZone: 0
         implicitWidth: sidebarWidth
         WlrLayershell.namespace: "quickshell:sidebarRight"
+        property list<Item> blurItems: [] // filled by BlurSource children
+        BackgroundEffect.blurRegion: BlurRegion { items: panelWindow.blurItems }
         WlrLayershell.keyboardFocus: GlobalStates.sidebarRightOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         color: "transparent"
 

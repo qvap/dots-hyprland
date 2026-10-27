@@ -91,6 +91,7 @@ Item {
 
     Rectangle {
         id: barBackground
+        BlurSource {}
         anchors {
             fill: parent
             margins: Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
@@ -108,6 +109,7 @@ Item {
     // centerOnly
     Rectangle {
         id: centerPill
+        BlurSource {}
         visible: root.centerOnly && Config.options.bar.showBackground && Config.options.bar.cornerStyle !== 2
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
@@ -141,6 +143,7 @@ Item {
 
             Rectangle {
                 id: topMaterialPill
+                BlurSource {}
                 visible: root.isMaterial
                 anchors.centerIn: parent
                 implicitWidth: topMaterialCol.implicitWidth
@@ -220,6 +223,7 @@ Item {
 
             Rectangle {
                 id: centerMaterialPill
+                BlurSource {}
                 visible: root.isMaterial
                 anchors.centerIn: parent
                 implicitWidth: centerMaterialCol.implicitWidth 
@@ -303,6 +307,7 @@ Item {
 
             Rectangle {
                 id: bottomMaterialPill
+                BlurSource {}
                 visible: root.isMaterial
                 anchors.centerIn: parent
                 implicitWidth: bottomMaterialCol.implicitWidth

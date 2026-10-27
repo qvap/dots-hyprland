@@ -1,3 +1,4 @@
+import qs.modules.common.widgets
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
@@ -45,6 +46,7 @@ Scope {
             implicitHeight: rect.height + 8 * 2
 
             WlrLayershell.namespace: "quickshell:reloadPopup"
+            BackgroundEffect.blurRegion: BlurRegion { items: [rect] }
 
             // color blending is a bit odd as detailed in the type reference.
             color: "transparent"

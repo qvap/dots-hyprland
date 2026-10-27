@@ -78,6 +78,8 @@ Scope {
                     ? Config.options.bar.frameThickness
                     : normalExclusiveZone
                 WlrLayershell.namespace: "quickshell:verticalBar"
+                property list<Item> blurItems: [] // filled by BlurSource children
+                BackgroundEffect.blurRegion: BlurRegion { items: barRoot.blurItems }
                 implicitWidth: hasMorphingMedia ? Math.min(screen.width, Appearance.sizes.verticalBarWidth + Appearance.sizes.mediaControlsWidth + 32)
                     : Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
                 mask: Region {

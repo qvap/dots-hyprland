@@ -42,6 +42,8 @@ Scope {
         screen: Quickshell.screens.find(s => Config.options.notifications.forceMonitor.enable ? s.name === Config.options.notifications.forceMonitor.name : s.name === Hyprland.focusedMonitor?.name) ?? null
 
         WlrLayershell.namespace: "quickshell:notificationPopup"
+        property list<Item> blurItems: [] // filled by BlurSource children
+        BackgroundEffect.blurRegion: BlurRegion { items: root.blurItems; inset: 1 }
         WlrLayershell.layer: WlrLayer.Overlay
         exclusiveZone: 0
 

@@ -76,6 +76,8 @@ Scope {
             exclusionMode: ExclusionMode.Ignore
             exclusiveZone: 0
             WlrLayershell.namespace: "quickshell:desktopMenu"
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: menuWindow.blurItems }
             WlrLayershell.layer: WlrLayer.Overlay
 
             anchors {
@@ -132,6 +134,7 @@ Scope {
                         implicitHeight: 160
                         radius: Appearance.rounding.verylarge
                         color: Appearance.colors.colUiBackground
+                        BlurSource {}
                         clip: true
 
                         WindowGlass {
@@ -174,6 +177,7 @@ Scope {
                                 Layout.fillWidth: true
                                 implicitHeight: 56
                                 color: Appearance.colors.colUiBackground
+                                BlurSource {}
                                 topLeftRadius: isFirst ? Appearance.rounding.normal : Appearance.rounding.unsharpenmore
                                 topRightRadius: isFirst ? Appearance.rounding.normal : Appearance.rounding.unsharpenmore
                                 bottomLeftRadius: isLast ? Appearance.rounding.normal : Appearance.rounding.unsharpenmore

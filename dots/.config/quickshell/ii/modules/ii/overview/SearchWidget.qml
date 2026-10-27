@@ -121,6 +121,7 @@ Item { // Wrapper
     }
     Rectangle { // Background
         id: searchWidgetContent
+        BlurSource {}
         anchors {
             top: parent.top
             horizontalCenter: parent.horizontalCenter

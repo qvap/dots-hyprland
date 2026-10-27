@@ -11,6 +11,7 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    readonly property alias background: barBackground
     implicitHeight: Appearance.sizes.barHeight
     width: parent.width
     readonly property real barPadding: 0
@@ -208,6 +209,7 @@ Item {
             // Material pill wrapper
             Rectangle {
                 id: leftMaterialPill
+                BlurSource {}
                 visible: root.isMaterial
                 opacity: root.morphHidesPill(root.effectiveLeftLayout, leftMaterialGroupRepeater) ? 0 : 1
                 anchors.centerIn: parent
@@ -333,6 +335,7 @@ Item {
             // Material pill wrapper
             Rectangle {
                 id: centerMaterialPill
+                BlurSource {}
                 visible: root.isMaterial
                 opacity: root.morphHidesPill(root.effectiveMiddleLayout, centerMaterialWorkspaceGroupRepeater) ? 0 : 1
                 anchors.centerIn: parent
@@ -446,6 +449,7 @@ Item {
             // Material pill wrapper
             Rectangle {
                 id: rightMaterialPill
+                BlurSource {}
                 visible: root.isMaterial
                 opacity: root.morphHidesPill(root.effectiveRightLayout, rightMaterialGroupRepeater) ? 0 : 1
                 anchors.centerIn: parent

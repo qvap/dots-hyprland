@@ -26,6 +26,7 @@ Item {
     }
     Rectangle {
         id: valueIndicator
+        BlurSource {}
         anchors {
             fill: parent
             margins: Appearance.sizes.elevationMargin

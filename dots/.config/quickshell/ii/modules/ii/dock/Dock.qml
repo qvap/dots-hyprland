@@ -43,6 +43,7 @@ Scope { // Scope
 
             implicitWidth: dockBackground.implicitWidth
             WlrLayershell.namespace: "quickshell:dock"
+            BackgroundEffect.blurRegion: BlurRegion { items: [dockVisualBackground] }
             color: "transparent"
 
             implicitHeight: baseHeight + magnifyRoom

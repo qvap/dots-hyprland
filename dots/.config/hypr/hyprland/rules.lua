@@ -195,6 +195,15 @@ hl.layer_rule({ match = { namespace = "osk[0-9]*" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur_popups = true})
 hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:.*" }, ignore_alpha = 0.79})
+-- These panels request blur themselves via ext-background-effect-v1 (BackgroundEffect.blurRegion)
+for _, ns in ipairs({ "bar", "verticalBar", "dock", "sidebarLeft", "sidebarRight", "overview", "cheatsheet", "osk",
+    "wallpaperSelector", "notificationPopup", "onScreenDisplay", "desktopMenu", "fileBasket", "reloadPopup", "widgetEditor", "session" }) do
+    hl.layer_rule({ match = { namespace = "quickshell:" .. ns }, blur = false, blur_popups = false, ignore_alpha = 0 })
+end
+-- Hyprland blurs the fade-out snapshot by alpha, ignoring the protocol region; keep shadows out of it
+for _, ns in ipairs({ "overview", "sidebarLeft", "sidebarRight" }) do
+    hl.layer_rule({ match = { namespace = "quickshell:" .. ns }, ignore_alpha = 0.5 })
+end
 hl.layer_rule({ match = { namespace = "quickshell:background" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:bar" }, animation = "slide"})
 hl.layer_rule({ match = { namespace = "quickshell:actionCenter" }, no_anim = true})
@@ -206,7 +215,7 @@ hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animatio
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 1})
 -- Overview anim
-hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = false, animation = "popin 90%" })
+hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = false, animation = "fade" })
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:polkit" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:popup" }, xray = false}) -- No weird color for bar tooltips (this in theory should suffice)
@@ -215,9 +224,7 @@ hl.layer_rule({ match = { namespace = "quickshell:mediaControls" }, ignore_alpha
 hl.layer_rule({ match = { namespace = "quickshell:reloadPopup" }, animation = "slide"})
 hl.layer_rule({ match = { namespace = "quickshell:regionSelector" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:screenshot" }, no_anim = true})
-hl.layer_rule({ match = { namespace = "quickshell:session" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
-hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right"})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left"})
 hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide"})

@@ -72,6 +72,7 @@ Item {
     }
     Rectangle {
         id: sidebarRightBackground
+        BlurSource {}
 
         anchors.fill: parent
         implicitHeight: parent.height - Appearance.sizes.hyprlandGapsOut * 2

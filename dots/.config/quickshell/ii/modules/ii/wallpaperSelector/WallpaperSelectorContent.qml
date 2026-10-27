@@ -125,6 +125,7 @@ MouseArea {
     }
     Rectangle {
         id: wallpaperGridBackground
+        BlurSource {}
         anchors {
             fill: parent
             margins: Appearance.sizes.elevationMargin

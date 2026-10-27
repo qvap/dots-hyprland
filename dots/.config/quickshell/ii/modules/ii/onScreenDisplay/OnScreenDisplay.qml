@@ -109,6 +109,8 @@ Scope {
             }
 
             WlrLayershell.namespace: "quickshell:onScreenDisplay"
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: osdRoot.blurItems }
             WlrLayershell.layer: WlrLayer.Overlay
             anchors {
                 top: !Config.options.bar.bottom
@@ -172,6 +174,7 @@ Scope {
                             }
                             Rectangle {
                                 id: protectionMessageBackground
+                                BlurSource {}
                                 anchors.centerIn: parent
                                 color: Appearance.m3colors.m3error
                                 property real padding: 10

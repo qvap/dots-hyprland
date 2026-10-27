@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
 
@@ -43,6 +44,7 @@ Item {
 
     Rectangle {
         id: background
+        BlurSource {}
         visible: root.paintBackground
         opacity: root.morphingMedia?.expansion > 0 ? 0 : 1
         anchors {

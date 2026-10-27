@@ -23,6 +23,8 @@ Scope {
         visible: GlobalStates.overviewOpen
 
         WlrLayershell.namespace: "quickshell:overview"
+        property list<Item> blurItems: [] // filled by BlurSource children
+        BackgroundEffect.blurRegion: BlurRegion { items: panelWindow.blurItems }
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.keyboardFocus: GlobalStates.overviewOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         color: "transparent"

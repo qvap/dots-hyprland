@@ -78,6 +78,7 @@ Scope {
                     .some(layout => layout.includes("media"))
                 readonly property BarMorphRegistry morphRegistry: BarMorphRegistry {}
                 property alias morphOverlay: morphOverlayLayer
+                property list<Item> blurItems: [] // filled by BlurSource children
                 readonly property bool morphExpanded: morphRegistry.expanded
                 onMorphExpandedChanged: {
                     if (morphExpanded) GlobalFocusGrab.addDismissable(barRoot);
@@ -135,6 +136,9 @@ Scope {
                         width: barRoot.cornerOpenCutWidth
                         height: barRoot.cornerOpenCutHeight
                     }
+                }
+                BackgroundEffect.blurRegion: BlurRegion {
+                    items: [barContent.background, ...barRoot.blurItems]
                 }
                 color: "transparent"
 

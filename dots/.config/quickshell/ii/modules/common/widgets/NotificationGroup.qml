@@ -162,11 +162,15 @@ MouseArea { // Notification group area
     }
     Rectangle { // Background of the notification
         id: background
+        BlurSource {}
         anchors.left: parent.left
         y: root.yOffset
         width: parent.width
         color: popup ? Appearance.colors.colBackgroundSurfaceContainer : Appearance.colors.colLayer2
         radius: Appearance.rounding.normal
+        // Hides the stair-stepped edge of the compositor blur region (wl_region is pixel-aligned)
+        border.width: popup ? 2 : 0
+        border.color: ColorUtils.applyAlpha(color, Math.min(1, color.a + 0.35))
         anchors.leftMargin: root.xOffset
 
         Behavior on y {

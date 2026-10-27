@@ -1,3 +1,4 @@
+import Quickshell.Wayland
 pragma ComponentBehavior: Bound
 
 import qs.services
@@ -18,6 +19,7 @@ PopupWindow {
     signal menuOpened(qsWindow: var) // Correct type is QsWindow, but QML does not like that
 
     color: "transparent"
+    BackgroundEffect.blurRegion: BlurRegion { items: [popupBackground] }
     property real padding: Appearance.sizes.elevationMargin
 
     implicitHeight: {

@@ -24,6 +24,8 @@ Scope {
 
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:wallpaperSelector"
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: panelWindow.blurItems }
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
             color: "transparent"

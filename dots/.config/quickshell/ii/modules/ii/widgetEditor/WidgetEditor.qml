@@ -39,6 +39,7 @@ Scope {
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:widgetEditor"
+            BackgroundEffect.blurRegion: BlurRegion { items: [settingsCard, pickerBar] }
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 

@@ -73,6 +73,7 @@ Item {
     }
     Rectangle { // Background
         id: overviewBackground
+        BlurSource {}
         property real padding: 10
         anchors.fill: parent
         anchors.margins: Appearance.sizes.elevationMargin
