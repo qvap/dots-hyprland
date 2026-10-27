@@ -236,23 +236,35 @@ ContentPage {
             }
         }
 
-        ConfigSlider {
+        ContentSubsection {
             visible: Config.options.appearance.transparency.enable && !Config.options.appearance.transparency.automatic
-            buttonIcon: "layers"
-            text: Translation.tr("Background transparency")
-            value: Config.options.appearance.transparency.backgroundTransparency
-            onValueChanged: {
-                Config.options.appearance.transparency.backgroundTransparency = value;
+            title: Translation.tr("Background transparency")
+            ConfigSlider {
+                showLabel: false
+                value: Config.options.appearance.transparency.backgroundTransparency
+                onValueChanged: {
+                    Config.options.appearance.transparency.backgroundTransparency = value;
+                }
             }
         }
 
-        ConfigSlider {
+        NoticeBox {
+            // Hyprland's ignore_alpha (used for the overview/sidebar layers) also discards protocol blur under faint pixels
+            visible: Appearance.backgroundTransparency > 0.5
+            Layout.fillWidth: true
+            materialIcon: "warning"
+            text: Translation.tr("At this transparency, ignore_alpha layer rules in your Hyprland config hide the blur of panels (overview, sidebars). Lower the transparency or remove those rules.")
+        }
+
+        ContentSubsection {
             visible: !Config.options.appearance.transparency.automatic
-            buttonIcon: "opacity"
-            text: Translation.tr("Content transparency")
-            value: Config.options.appearance.transparency.contentTransparency
-            onValueChanged: {
-                Config.options.appearance.transparency.contentTransparency = value;
+            title: Translation.tr("Content transparency")
+            ConfigSlider {
+                showLabel: false
+                value: Config.options.appearance.transparency.contentTransparency
+                onValueChanged: {
+                    Config.options.appearance.transparency.contentTransparency = value;
+                }
             }
         }
     }

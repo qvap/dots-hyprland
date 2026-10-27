@@ -1412,5 +1412,6 @@
   "Saved    ": "Сохранено    ",
   "Automatic transparency": "Автоматическая прозрачность",
   "Background transparency": "Прозрачность фона",
-  "Content transparency": "Прозрачность содержимого"
+  "Content transparency": "Прозрачность содержимого",
+  "At this transparency, ignore_alpha layer rules in your Hyprland config hide the blur of panels (overview, sidebars). Lower the transparency or remove those rules.": "При такой прозрачности правила ignore_alpha в конфиге Hyprland скрывают размытие панелей (обзор, боковые панели). Уменьшите прозрачность или удалите эти правила."
 }
