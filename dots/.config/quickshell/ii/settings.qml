@@ -228,7 +228,16 @@ ApplicationWindow {
                         }
                     }
 
+                    StyledFlickable {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        implicitWidth: tabArray.implicitWidth
+                        contentHeight: tabArray.implicitHeight
+                        clip: true
+
                     NavigationRailTabArray {
+                        id: tabArray
+                        width: parent.width
                         currentIndex: root.currentPage
                         expanded: navRail.expanded
                         Repeater {
@@ -246,9 +255,6 @@ ApplicationWindow {
                             }
                         }
                     }
-
-                    Item {
-                        Layout.fillHeight: true
                     }
                 }
             }
