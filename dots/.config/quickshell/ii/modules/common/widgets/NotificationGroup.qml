@@ -3,6 +3,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Services.Notifications
 
@@ -20,6 +21,16 @@ MouseArea { // Notification group area
     property bool popup: false
     property real padding: 10
     implicitHeight: background.implicitHeight + background.y
+
+    // While swiped, clip to the group's own rounded slot so the card looks like it shrinks away
+    layer.enabled: background.anchors.leftMargin !== 0
+    layer.effect: OpacityMask {
+        maskSource: Rectangle {
+            width: root.width
+            height: root.height
+            radius: background.radius
+        }
+    }
 
     property real dragConfirmThreshold: 70 // Drag further to discard notification
     property real dragExpandThreshold: 70 // Pull down further to expand the group
