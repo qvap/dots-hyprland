@@ -64,7 +64,7 @@ Scope { // Scope
         root.sidebarContent = contentComponent.createObject(null, {
             "scopeRoot": root
         });
-        sidebarLoader.item.contentParent.children = [root.sidebarContent];
+        root.sidebarContent.parent = sidebarLoader.item.contentParent; // keeps the background's own children (BlurSource)
     }
 
     onDetachChanged: {
@@ -73,12 +73,12 @@ Scope { // Scope
             sidebarContent.parent = null; // Detach content from sidebar
             sidebarLoader.active = false; // Unload sidebar
             detachedSidebarLoader.active = true; // Load detached window
-            detachedSidebarLoader.item.contentParent.children = [sidebarContent];
+            sidebarContent.parent = detachedSidebarLoader.item.contentParent;
         } else {
             sidebarContent.parent = null; // Detach content from window
             detachedSidebarLoader.active = false; // Unload detached window
             sidebarLoader.active = true; // Load sidebar
-            sidebarLoader.item.contentParent.children = [sidebarContent];
+            sidebarContent.parent = sidebarLoader.item.contentParent;
         }
     }
 

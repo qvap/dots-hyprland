@@ -29,7 +29,8 @@ Item {
         : glassEnabled && (Config.options?.background?.widgets?.glass?.enable ?? false)
     readonly property bool tracking: live && (win?.visible ?? true)
 
-    readonly property var win: QsWindow.window
+    // Re-read on Window.window changes: items created before they are in a window (Loaders) get it only later
+    readonly property var win: Window.window ? QsWindow.window : null
     readonly property var surfaceScreen: ({
         name: "",
         width: root.Window.width,
