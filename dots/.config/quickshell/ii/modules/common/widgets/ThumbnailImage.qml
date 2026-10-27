@@ -33,17 +33,20 @@ StyledImage {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
-    onSourceSizeChanged: {
+    function regenerate() {
         if (!root.generateThumbnail) return;
         thumbnailGeneration.running = false;
         thumbnailGeneration.running = true;
     }
+    onSourceSizeChanged: regenerate()
+    // sourceSize set at creation doesn't emit a change
+    Component.onCompleted: regenerate()
     Process {
         id: thumbnailGeneration
         command: {
             const maxSize = Images.thumbnailSizes[root.thumbnailSizeName];
             return ["bash", "-c", 
-                `[ -f '${FileUtils.trimFileProtocol(root.thumbnailPath)}' ] && exit 0 || { magick '${root.sourcePath}[0]' -resize ${maxSize}x${maxSize} '${FileUtils.trimFileProtocol(root.thumbnailPath)}' && exit 1; }`
+                `[ -f '${FileUtils.trimFileProtocol(root.thumbnailPath)}' ] && exit 0 || { mkdir -p '${FileUtils.parentDirectory(FileUtils.trimFileProtocol(root.thumbnailPath))}' && magick '${root.sourcePath}[0]' -resize ${maxSize}x${maxSize} '${FileUtils.trimFileProtocol(root.thumbnailPath)}' && exit 1; }`
             ]
         }
         onExited: (exitCode, exitStatus) => {
