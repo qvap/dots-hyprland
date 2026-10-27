@@ -1409,5 +1409,8 @@
   "steamcmd stopped unexpectedly (exit code %1)": "steamcmd неожиданно завершился (код выхода %1)",
   "this session": "в этой сессии",
   "to full": "до полного заряда",
-  "Saved    ": "Сохранено    "
+  "Saved    ": "Сохранено    ",
+  "Automatic transparency": "Автоматическая прозрачность",
+  "Background transparency": "Прозрачность фона",
+  "Content transparency": "Прозрачность содержимого"
 }
