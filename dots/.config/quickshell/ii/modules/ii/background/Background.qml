@@ -255,7 +255,7 @@ Variants {
                 }
 
                 readonly property bool needed: Config.options.background.widgets.glass.enable
-                    || (Config.options.background.widgets.blurWidgets && !Config.options.background.widgets.compositorBlur)
+                    || (Config.options.background.widgets.blurWidgets && !Config.options.appearance.blur.compositor)
                 source: (bgRoot.wallpaperSafetyTriggered || !needed) ? "" : bgRoot.wallpaperPath
                 fillMode: Image.PreserveAspectCrop
                 Behavior on x {

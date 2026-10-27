@@ -173,6 +173,7 @@ Scope {
             Rectangle {
                 id: basketBackground
 
+                BlurSource {}
                 width: basketWindow.basketSize
                 height: width
                 visible: basketWindow.expanded || anchors.rightMargin > -width

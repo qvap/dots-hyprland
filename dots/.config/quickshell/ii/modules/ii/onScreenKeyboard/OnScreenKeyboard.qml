@@ -72,6 +72,7 @@ Scope { // Scope
             }
             Rectangle {
                 id: oskBackground
+                BlurSource {}
                 anchors.centerIn: parent
                 color: Appearance.colors.colLayer0
                 radius: Appearance.rounding.windowRounding

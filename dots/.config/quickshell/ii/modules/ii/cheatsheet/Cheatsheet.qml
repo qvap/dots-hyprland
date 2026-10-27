@@ -74,6 +74,7 @@ Scope { // Scope
             }
             Rectangle {
                 id: cheatsheetBackground
+                BlurSource {}
                 anchors.centerIn: parent
                 color: Appearance.colors.colLayer0
                 border.width: 1

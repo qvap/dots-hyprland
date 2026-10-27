@@ -44,7 +44,10 @@ Item {
 
     Rectangle {
         id: background
-        BlurSource {}
+        // In the Material style the section pills behind the groups carry the blur
+        BlurSource {
+            active: !root.isMaterial
+        }
         visible: root.paintBackground
         opacity: root.morphingMedia?.expansion > 0 ? 0 : 1
         anchors {

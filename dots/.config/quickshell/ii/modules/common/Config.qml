@@ -147,6 +147,12 @@ Singleton {
                     property real backgroundTransparency: 0.11
                     property real contentTransparency: 0.57
                 }
+                property JsonObject blur: JsonObject {
+                    // Blur panels and widgets through the compositor (ext-background-effect, strength from its settings);
+                    // off = the shell blurs the wallpaper itself with `radius`
+                    property bool compositor: true
+                    property real radius: 32
+                }
                 property JsonObject wallpaperTheming: JsonObject {
                     property bool enableAppsAndShell: true
                     property bool enableQtApps: true
@@ -225,8 +231,6 @@ Singleton {
                 property list<string> screenList: [] // Screens that show desktop widgets; empty = all
                 property JsonObject widgets: JsonObject {
                     property bool blurWidgets: false
-                    property real blurRadius: 32
-                    property bool compositorBlur: false // Blur through the compositor (ext-background-effect) instead of in the shell
                     property JsonObject glass: JsonObject {
                         property bool enable: false
                     }

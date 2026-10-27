@@ -172,6 +172,7 @@ Item {
 
             Rectangle {
                 id: popupBackground
+                BlurSource {}
                 property real padding: 5
                 opacity: previewPopup.show ? 1 : 0
                 visible: opacity > 0

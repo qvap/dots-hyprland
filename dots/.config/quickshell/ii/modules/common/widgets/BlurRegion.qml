@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.modules.common
 
 // Compositor-side blur (ext-background-effect-v1) under each visible, non-transparent item.
 // Use as `BackgroundEffect.blurRegion: BlurRegion { items: [...] }` on a window.
@@ -14,7 +15,8 @@ Region {
 
     regions: itemRegions.instances
     property Variants itemRegions: Variants {
-        model: root.items
+        // Shell-side blur instead (BlurSource) when compositor blur is off
+        model: Config.options.appearance.blur.compositor ? root.items : []
         Region {
             id: itemRegion
             required property Item modelData

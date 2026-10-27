@@ -12,7 +12,7 @@ Rectangle {
 
     radius: Appearance.rounding?.verylarge ?? 30
     // Glass and compositor blur show what is behind the card; FastBlurred paints the tint
-    color: (glass && Config.options.background.widgets.glass.enable) || (blurred && Config.options.background.widgets.compositorBlur)
+    color: (glass && Config.options.background.widgets.glass.enable) || (blurred && Config.options.appearance.blur.compositor)
         ? "transparent" : Appearance.colors.colPrimaryContainer
 
     StyledRectangularShadow {

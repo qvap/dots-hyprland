@@ -64,6 +64,7 @@ PopupWindow {
 
         Rectangle {
             id: popupBackground
+            BlurSource {}
             readonly property real padding: 4
             anchors {
                 left: parent.left

@@ -250,10 +250,38 @@ ContentPage {
 
         NoticeBox {
             // Hyprland's ignore_alpha (used for the overview/sidebar layers) also discards protocol blur under faint pixels
-            visible: Appearance.backgroundTransparency > 0.5
+            visible: Config.options.appearance.blur.compositor && Appearance.backgroundTransparency > 0.5
             Layout.fillWidth: true
             materialIcon: "warning"
             text: Translation.tr("At this transparency, ignore_alpha layer rules in your Hyprland config hide the blur of panels (overview, sidebars). Lower the transparency or remove those rules.")
+        }
+
+        ConfigSwitch {
+            buttonIcon: "blur_circular"
+            text: Translation.tr("Compositor blur")
+            checked: Config.options.appearance.blur.compositor
+            onCheckedChanged: {
+                Config.options.appearance.blur.compositor = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Panels and widgets are blurred by the compositor (strength from its settings).\nOff: the shell blurs the wallpaper itself, with its own radius")
+            }
+        }
+
+        ContentSubsection {
+            visible: !Config.options.appearance.blur.compositor
+            title: Translation.tr("Blur radius")
+            ConfigSlider {
+                showLabel: false
+                usePercentTooltip: false
+                from: 1
+                to: 64
+                stopIndicatorValues: [32]
+                value: Config.options.appearance.blur.radius
+                onValueChanged: {
+                    Config.options.appearance.blur.radius = value;
+                }
+            }
         }
 
         ContentSubsection {

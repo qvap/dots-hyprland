@@ -62,6 +62,7 @@ Scope {
 
             Rectangle {
                 id: rect
+                BlurSource {}
                 anchors.centerIn: parent
                 color: root.failed ? "#ffe99195" : "#ffD1E8D5"
 

@@ -65,6 +65,7 @@ Scope {
             // Settings card, left of and above the picker
             Rectangle {
                 id: settingsCard
+                BlurSource {}
                 width: 284
                 implicitHeight: settingsCol.implicitHeight + 16
                 x: pickerBar.x
@@ -121,21 +122,21 @@ Scope {
                         visible: Config.options.background.widgets.blurWidgets
                         buttonIcon: "blur_circular"
                         text: Translation.tr("Compositor blur")
-                        checked: Config.options.background.widgets.compositorBlur
-                        onCheckedChanged: Config.options.background.widgets.compositorBlur = checked
+                        checked: Config.options.appearance.blur.compositor
+                        onCheckedChanged: Config.options.appearance.blur.compositor = checked
                     }
                     ConfigSlider {
                         Layout.fillWidth: true
                         showLabel: false
                         // The compositor's blur strength comes from its own settings
-                        visible: Config.options.background.widgets.blurWidgets && !Config.options.background.widgets.compositorBlur
-                        value: Config.options.background.widgets.blurRadius ?? 32
+                        visible: Config.options.background.widgets.blurWidgets && !Config.options.appearance.blur.compositor
+                        value: Config.options.appearance.blur.radius ?? 32
                         usePercentTooltip: false
                         buttonIcon: "aspect_ratio"
                         from: 1
                         to: 64
                         stopIndicatorValues: [32]
-                        onValueChanged: Config.options.background.widgets.blurRadius = value
+                        onValueChanged: Config.options.appearance.blur.radius = value
                     }
                 }
             }
@@ -143,6 +144,7 @@ Scope {
             // Widget picker
             Rectangle {
                 id: pickerBar
+                BlurSource {}
                 readonly property real maxWidth: editorWindow.width - 32
                 width: Math.min(tilesRow.width + doneButton.width + 8 + 16, maxWidth)
                 height: 72

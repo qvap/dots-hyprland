@@ -8,13 +8,13 @@ Item {
     property real cardRadius: 30
     property color tint: "white"
     property real tintOpacity: 0.15
-    property real blurRadius: Config.options.background.widgets.blurRadius ?? 32
+    property real blurRadius: Config.options.appearance.blur.radius ?? 32
     property real trackX: 0
     property real trackY: 0
 
     readonly property real oversample: blurRadius * 1.5
     // Let the compositor blur what is behind the window (wayhaven's wallpaper) instead
-    readonly property bool compositor: Config.options.background.widgets.compositorBlur
+    readonly property bool compositor: Config.options.appearance.blur.compositor
     readonly property real radius: cardRadius // for BlurRegion
 
     Loader {

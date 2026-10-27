@@ -113,6 +113,7 @@ Scope { // Scope
                         }
                         Rectangle { // The real rectangle that is visible
                             id: dockVisualBackground
+                            BlurSource {}
                             property real margin: Appearance.sizes.elevationMargin
                             anchors.fill: parent
                             anchors.topMargin: Appearance.sizes.elevationMargin

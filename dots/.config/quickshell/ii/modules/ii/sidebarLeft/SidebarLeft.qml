@@ -138,6 +138,7 @@ Scope { // Scope
             }
             Rectangle {
                 id: sidebarLeftBackground
+                BlurSource {}
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.topMargin: Appearance.sizes.hyprlandGapsOut

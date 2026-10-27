@@ -1414,5 +1414,6 @@
   "Background transparency": "Прозрачность фона",
   "Content transparency": "Прозрачность содержимого",
   "At this transparency, ignore_alpha layer rules in your Hyprland config hide the blur of panels (overview, sidebars). Lower the transparency or remove those rules.": "При такой прозрачности правила ignore_alpha в конфиге Hyprland скрывают размытие панелей (обзор, боковые панели). Уменьшите прозрачность или удалите эти правила.",
-  "Compositor blur": "Размытие композитором"
+  "Compositor blur": "Размытие композитором",
+  "Panels and widgets are blurred by the compositor (strength from its settings).\nOff: the shell blurs the wallpaper itself, with its own radius": "Панели и виджеты размывает композитор (сила — из его настроек).\nВыкл.: оболочка сама размывает обои со своим радиусом"
 }

@@ -1043,14 +1043,14 @@ ContentPage {
             }
             ConfigSlider {
                 Layout.fillWidth: true
-                visible: Config.options.background.widgets.blurWidgets
+                visible: Config.options.background.widgets.blurWidgets && !Config.options.appearance.blur.compositor
                 buttonIcon: "blur_medium"
                 text: Translation.tr("Blur radius")
                 usePercentTooltip: false
                 from: 1
                 to: 64
-                value: Config.options.background.widgets.blurRadius
-                onValueChanged: Config.options.background.widgets.blurRadius = value
+                value: Config.options.appearance.blur.radius
+                onValueChanged: Config.options.appearance.blur.radius = value
             }
         }
     }

@@ -22,7 +22,11 @@ Item {
     property real hangLeft: 0
     property real hangRight: 0
     property int edge: 0
-    readonly property bool live: glassEnabled && (Config.options?.background?.widgets?.glass?.enable ?? false)
+    // Plain blurred wallpaper instead of glass: the shell-side fallback when compositor blur is off (BlurSource)
+    property bool blurMode: false
+    readonly property bool live: blurMode
+        ? !(Config.options?.appearance?.blur?.compositor ?? true)
+        : glassEnabled && (Config.options?.background?.widgets?.glass?.enable ?? false)
     readonly property bool tracking: live && (win?.visible ?? true)
 
     readonly property var win: QsWindow.window
@@ -196,8 +200,19 @@ Item {
                 cache: true
             }
 
+            FastBlurred {
+                anchors.fill: parent
+                visible: root.blurMode
+                blurSource: wallpaperImage
+                cardRadius: root.cardRadius
+                tintOpacity: 0
+                trackX: wallpaperImage.x
+                trackY: wallpaperImage.y
+            }
+
             FrostedGlass {
                 anchors.fill: parent
+                visible: !root.blurMode
                 blurSource: wallpaperImage
                 cardRadius: root.cardRadius
                 topLeftRadius: root.topLeftRadius

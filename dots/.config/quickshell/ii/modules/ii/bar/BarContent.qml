@@ -95,6 +95,7 @@ Item {
 
     Rectangle {
         id: barBackground
+        BlurSource {}
         anchors.fill: parent
         anchors.margins: Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
         color: (!centerOnly && Config.options.bar.showBackground && Config.options.bar.cornerStyle !== 2 && !root.isMaterial)
