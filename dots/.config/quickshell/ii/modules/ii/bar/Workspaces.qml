@@ -9,6 +9,7 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Hyprland
 
 ButtonMouseArea {
     id: root
@@ -49,7 +50,7 @@ ButtonMouseArea {
 
     // Interactions
     property bool switchOnPress: true
-    acceptedButtons: Qt.LeftButton | Qt.RightButton
+    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.BackButton
     hoverEnabled: true
     property int hoverIndex: {
         const position = root.vertical ? mouseY : mouseX;
@@ -59,11 +60,17 @@ ButtonMouseArea {
     function switchWorkspaceToHovered() {
         WM.switchWorkspace(wsModel.getWorkspaceIdAt(hoverIndex));
     }
+    function toggleSpecial() {
+        if (WM.compositor === "hyprland")
+            Hyprland.dispatch(`hl.dsp.workspace.toggle_special("special")`);
+    }
     onPressed: mouse => {
         if (mouse.button == Qt.LeftButton && switchOnPress)
             switchWorkspaceToHovered();
         else if (mouse.button == Qt.RightButton)
             GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+        else if (mouse.button == Qt.BackButton)
+            toggleSpecial();
     }
     onClicked: mouse => {
         if (mouse.button === Qt.LeftButton && !switchOnPress) switchWorkspaceToHovered();
