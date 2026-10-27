@@ -29,13 +29,6 @@ Scope {
         GlobalStates.desktopMenuOpen = true
     }
 
-    function displayPathFor(path) {
-        if (!path) return path
-        return /\.(mp4|webm|mkv|avi|mov)$/i.test(path)
-            ? Config.options.background.thumbnailPath
-            : path
-    }
-
     // Wallpaper folder images
     FolderListModel {
         id: wallpaperFolder
@@ -46,7 +39,7 @@ Scope {
             return "file://" + wallPath.substring(0, lastSlash)
         }
         showDirs: false
-        nameFilters: ["*.jpg", "*.jpeg", "*.png", "*.webp"]
+        nameFilters: ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.mp4", "*.webm", "*.mkv", "*.mov"]
     }
 
     property int carouselExtraCount: 5
@@ -67,8 +60,8 @@ Scope {
 
     property var carouselModel: {
         const current = FileUtils.trimFileProtocol(Config.options.background.wallpaperPath)
-        if (!current || current.length === 0) return randomWallpapers.map(p => root.displayPathFor(p))
-        return [root.displayPathFor(current), ...randomWallpapers.map(p => root.displayPathFor(p))]
+        if (!current || current.length === 0) return randomWallpapers
+        return [current, ...randomWallpapers]
     }
 
     // Menu window
