@@ -311,6 +311,15 @@ Singleton {
                         property int clockCount: 4 
                     }
 
+                    property JsonObject sun: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property real z: 0
+                        property string sizeMode: "2x2"
+                    }
+
                     property JsonObject notes: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

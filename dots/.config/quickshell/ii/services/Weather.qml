@@ -63,6 +63,8 @@ Singleton {
 
         temp.sunrise = data?.sys?.sunrise ? fmt(data.sys.sunrise) : "0"
         temp.sunset  = data?.sys?.sunset  ? fmt(data.sys.sunset)  : "0"
+        temp.sunriseTs = data?.sys?.sunrise ?? 0
+        temp.sunsetTs  = data?.sys?.sunset  ?? 0
 
         temp.windDir = data?.wind?.deg || 0
         temp.wCode = data?.weather?.[0]?.id || 0

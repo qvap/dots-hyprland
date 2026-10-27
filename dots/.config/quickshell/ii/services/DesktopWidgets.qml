@@ -12,6 +12,7 @@ Singleton {
         { key: "weather",     icon: "partly_cloudy_day", name: Translation.tr("Weather") },
         { key: "calendar",    icon: "calendar_month",    name: Translation.tr("Calendar") },
         { key: "worldClock",  icon: "public",            name: Translation.tr("World Clock") },
+        { key: "sun",         icon: "wb_twilight",       name: Translation.tr("Sunrise & Sunset") },
         { key: "media",       icon: "music_note",        name: Translation.tr("Media") },
         { key: "visualizer",  icon: "graphic_eq",        name: Translation.tr("Visualizer") },
         { key: "resources",   icon: "monitor_heart",     name: Translation.tr("Resources") },

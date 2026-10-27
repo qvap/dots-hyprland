@@ -15,6 +15,7 @@ import qs.modules.ii.background.widgets.resources
 import qs.modules.ii.background.widgets.visualizer
 import qs.modules.ii.background.widgets.calendar
 import qs.modules.ii.background.widgets.worldclock
+import qs.modules.ii.background.widgets.sun
 import qs.modules.ii.background.widgets.usercard
 import qs.modules.ii.background.widgets.notes
 import qs.modules.ii.background.widgets.todo
@@ -45,6 +46,7 @@ Item {
             { key: "images" },
             { key: "resources" },
             { key: "worldClock" },
+            { key: "sun" },
             { key: "userCard" },
             { key: "todo" },
             { key: "timers" },
@@ -77,6 +79,7 @@ Item {
                     case "images":      return imagesComp
                     case "resources":   return resourcesComp
                     case "worldClock":  return worldClockComp
+                    case "sun":         return sunComp
                     case "userCard":    return userCardComp
                     case "todo":        return todoComp
                     case "timers":      return timersComp
@@ -228,6 +231,17 @@ Item {
     Component {
         id: worldClockComp
         WorldClockWidget {
+            screenWidth: root.screen.width
+            screenHeight: root.screen.height
+            scaledScreenWidth: root.screen.width
+            scaledScreenHeight: root.screen.height
+            wallpaperScale: 1
+            wallpaperItem: root.wallpaperItem
+        }
+    }
+    Component {
+        id: sunComp
+        SunWidget {
             screenWidth: root.screen.width
             screenHeight: root.screen.height
             scaledScreenWidth: root.screen.width
