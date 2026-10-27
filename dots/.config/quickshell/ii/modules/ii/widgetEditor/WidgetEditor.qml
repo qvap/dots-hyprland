@@ -116,10 +116,19 @@ Scope {
                         checked: Config.options.background.widgets.blurWidgets
                         onCheckedChanged: Config.options.background.widgets.blurWidgets = checked
                     }
+                    ConfigSwitch {
+                        Layout.fillWidth: true
+                        visible: Config.options.background.widgets.blurWidgets
+                        buttonIcon: "blur_circular"
+                        text: Translation.tr("Compositor blur")
+                        checked: Config.options.background.widgets.compositorBlur
+                        onCheckedChanged: Config.options.background.widgets.compositorBlur = checked
+                    }
                     ConfigSlider {
                         Layout.fillWidth: true
                         showLabel: false
-                        visible: Config.options.background.widgets.blurWidgets
+                        // The compositor's blur strength comes from its own settings
+                        visible: Config.options.background.widgets.blurWidgets && !Config.options.background.widgets.compositorBlur
                         value: Config.options.background.widgets.blurRadius ?? 32
                         usePercentTooltip: false
                         buttonIcon: "aspect_ratio"

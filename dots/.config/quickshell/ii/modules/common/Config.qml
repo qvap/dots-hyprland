@@ -226,6 +226,7 @@ Singleton {
                 property JsonObject widgets: JsonObject {
                     property bool blurWidgets: false
                     property real blurRadius: 32
+                    property bool compositorBlur: false // Blur through the compositor (ext-background-effect) instead of in the shell
                     property JsonObject glass: JsonObject {
                         property bool enable: false
                     }

@@ -53,7 +53,7 @@ AbstractBackgroundWidget {
             id: contentRect
             anchors.fill: parent
             widget: root
-            color: sizeMode === "4x1" ? "transparent" : Appearance.colors.colPrimaryContainer
+            color: sizeMode === "4x1" || (blurred && Config.options.background.widgets.compositorBlur) ? "transparent" : Appearance.colors.colPrimaryContainer
             shadowed: sizeMode !== "4x1" && Config.options.background.widgets.shadow
             blurred: Config.options.background.widgets.blurWidgets && sizeMode === "2x2"
             glass: sizeMode !== "4x1"

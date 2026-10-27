@@ -11,7 +11,9 @@ Rectangle {
     property bool glass: true
 
     radius: Appearance.rounding?.verylarge ?? 30
-    color: glass && Config.options.background.widgets.glass.enable ? "transparent" : Appearance.colors.colPrimaryContainer
+    // Glass and compositor blur show what is behind the card; FastBlurred paints the tint
+    color: (glass && Config.options.background.widgets.glass.enable) || (blurred && Config.options.background.widgets.compositorBlur)
+        ? "transparent" : Appearance.colors.colPrimaryContainer
 
     StyledRectangularShadow {
         target: root

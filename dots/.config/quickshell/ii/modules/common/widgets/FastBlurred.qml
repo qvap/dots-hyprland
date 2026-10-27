@@ -13,8 +13,18 @@ Item {
     property real trackY: 0
 
     readonly property real oversample: blurRadius * 1.5
+    // Let the compositor blur what is behind the window (wayhaven's wallpaper) instead
+    readonly property bool compositor: Config.options.background.widgets.compositorBlur
+    readonly property real radius: cardRadius // for BlurRegion
 
-    layer.enabled: true
+    Loader {
+        active: root.compositor
+        sourceComponent: BlurSource {
+            target: root
+        }
+    }
+
+    layer.enabled: !root.compositor
     layer.effect: OpacityMask {
         maskSource: Rectangle {
             width: root.width; height: root.height
@@ -29,12 +39,12 @@ Item {
         width: root.width + root.oversample * 2
         height: root.height + root.oversample * 2
         radius: root.blurRadius
-        visible: root.blurSource !== null
-        source: root.blurSource ? shaderSource : null
+        visible: !root.compositor && root.blurSource !== null
+        source: visible ? shaderSource : null
 
         ShaderEffectSource {
             id: shaderSource
-            sourceItem: root.blurSource
+            sourceItem: root.compositor ? null : root.blurSource
             sourceRect: {
                 var _fx = root.trackX
                 var _fy = root.trackY

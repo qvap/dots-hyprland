@@ -37,7 +37,7 @@ AbstractBackgroundWidget {
         implicitWidth: root.cardWidth
         implicitHeight: root.cardHeight
         widget: root
-        color: statCard.bgColor
+        color: blurred && Config.options.background.widgets.compositorBlur ? "transparent" : statCard.bgColor
 
         ColumnLayout {
             anchors {

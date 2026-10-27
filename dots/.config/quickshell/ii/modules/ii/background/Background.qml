@@ -8,7 +8,6 @@ import qs.modules.common.widgets.widgetCanvas
 import qs.modules.common.functions as CF
 import QtQuick
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -72,9 +71,28 @@ Variants {
         // Layer props
         screen: modelData
         exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: (GlobalStates.screenLocked && !scaleAnim.running) ? WlrLayer.Overlay : WlrLayer.Bottom
-        // WlrLayershell.layer: WlrLayer.Bottom
+        // While locked, wayhaven lifts the wallpaper to the overlay layer once its zoom/blur-in is done;
+        // follow it a bit later so these widgets stay above it
+        property bool onLockLayer: false
+        WlrLayershell.layer: onLockLayer ? WlrLayer.Overlay : WlrLayer.Bottom
+        Timer {
+            id: lockLayerTimer
+            interval: Config.options.lock.blur.enable ? 550 : 150
+            onTriggered: bgRoot.onLockLayer = GlobalStates.screenLocked
+        }
+        Connections {
+            target: GlobalStates
+            function onScreenLockedChanged() {
+                bgRoot.sendLock();
+                if (GlobalStates.screenLocked)
+                    lockLayerTimer.restart();
+                else
+                    bgRoot.onLockLayer = false;
+            }
+        }
         WlrLayershell.namespace: "quickshell:background"
+        property list<Item> blurItems: [] // widget backgrounds in compositor blur mode (BlurSource)
+        BackgroundEffect.blurRegion: BlurRegion { items: bgRoot.blurItems }
         // Desktop widgets take the keyboard while being edited (text entry, Del to remove)
         WlrLayershell.keyboardFocus: GlobalStates.desktopWidgetKeyboardFocus ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         anchors {
@@ -84,7 +102,7 @@ Variants {
             right: true
         }
         color: {
-            if (!bgRoot.wallpaperSafetyTriggered || bgRoot.wallpaperIsVideo)
+            if (!bgRoot.wallpaperSafetyTriggered)
                 return "transparent";
             return CF.ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colPrimary, 0.75);
         }
@@ -124,37 +142,47 @@ Variants {
             }
         }
 
-        // Video wallpaper bridge: the wayhaven daemon draws the video on the background layer.
-        // We feed it the same parallax fractions the still wallpaper uses; it animates them itself
-        // with the same curve (OutCubic, 600ms), so video and widgets move in sync.
-        function sendVideoParallax() {
-            if (!videoWallpaperSocket.connected)
+        // The wayhaven daemon draws the wallpaper (picture or video) on the background layer.
+        // We feed it the parallax fractions; it animates them itself with the same curve
+        // (OutCubic, 600ms) as `wallpaper` below, so the wallpaper and widgets move in sync.
+        function sendParallax() {
+            if (!wallpaperSocket.connected)
                 return;
-            videoWallpaperSocket.write(`parallax ${bgRoot.monitor?.name ?? "*"} ${wallpaper.usedFractionX} ${wallpaper.usedFractionY} ${bgRoot.parallaxRation}\n`);
-            videoWallpaperSocket.flush();
+            wallpaperSocket.write(`parallax ${bgRoot.monitor?.name ?? "*"} ${wallpaper.usedFractionX} ${wallpaper.usedFractionY} ${bgRoot.parallaxRation}\n`);
+            wallpaperSocket.flush();
         }
-        onParallaxRationChanged: sendVideoParallax()
+        // Lock screen: wayhaven zooms/blurs the wallpaper (lock.blur) and shows lockWall if set
+        function sendLock() {
+            if (!wallpaperSocket.connected)
+                return;
+            wallpaperSocket.write(`lock ${GlobalStates.screenLocked ? 1 : 0}\n`);
+            wallpaperSocket.flush();
+        }
+        onParallaxRationChanged: sendParallax()
         Connections {
             target: wallpaper
             function onUsedFractionXChanged() {
-                bgRoot.sendVideoParallax();
+                bgRoot.sendParallax();
             }
             function onUsedFractionYChanged() {
-                bgRoot.sendVideoParallax();
+                bgRoot.sendParallax();
             }
         }
         Socket {
-            id: videoWallpaperSocket
+            id: wallpaperSocket
             path: `${Quickshell.env("XDG_RUNTIME_DIR")}/wayhaven.sock`
-            onConnectionStateChanged: bgRoot.sendVideoParallax()
+            onConnectionStateChanged: {
+                bgRoot.sendParallax();
+                bgRoot.sendLock();
+            }
         }
         Timer {
             // (Re)connect: the daemon may start after the shell, or be restarted
             interval: 2000
             repeat: true
             triggeredOnStart: true
-            running: bgRoot.wallpaperIsVideo && !videoWallpaperSocket.connected
-            onTriggered: videoWallpaperSocket.connected = true
+            running: !wallpaperSocket.connected
+            onTriggered: wallpaperSocket.connected = true
         }
 
         Item {
@@ -173,13 +201,11 @@ Variants {
                 }
             }
 
-            // Wallpaper
+            // Not drawn (wayhaven shows the wallpaper): an invisible copy laid out exactly like it, which the
+            // shell-side blur/glass of widgets samples. Only loaded while one of those effects is on.
             StyledImage {
                 id: wallpaper
-                visible: opacity > 0 && !blurLoader.active
-                // For videos the wayhaven daemon draws below us; until it is reachable (not installed,
-                // still starting) show the video's first frame instead of an empty background
-                opacity: (status === Image.Ready && (!bgRoot.wallpaperIsVideo || !videoWallpaperSocket.connected)) ? 1 : 0
+                opacity: 0 // ShaderEffectSource still captures it
                 cache: false
                 smooth: false
 
@@ -228,7 +254,9 @@ Variants {
                     return - bgRoot.parallaxTotalPixelsY * usedFractionY;
                 }
 
-                source: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
+                readonly property bool needed: Config.options.background.widgets.glass.enable
+                    || (Config.options.background.widgets.blurWidgets && !Config.options.background.widgets.compositorBlur)
+                source: (bgRoot.wallpaperSafetyTriggered || !needed) ? "" : bgRoot.wallpaperPath
                 fillMode: Image.PreserveAspectCrop
                 Behavior on x {
                     NumberAnimation {
@@ -246,29 +274,13 @@ Variants {
                 height: bgRoot.scaledWallpaperHeight
             }
 
-            Loader {
-                id: blurLoader
-                active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || scaleAnim.running)
-                anchors.fill: wallpaper
-                scale: GlobalStates.screenLocked ? Config.options.lock.blur.extraZoom : 1
-                Behavior on scale {
-                    NumberAnimation {
-                        id: scaleAnim
-                        duration: 400
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.expressiveDefaultSpatial
-                    }
-                }
-                sourceComponent: GaussianBlur {
-                    source: wallpaper
-                    radius: GlobalStates.screenLocked ? Config.options.lock.blur.radius : 0
-                    samples: radius * 2 + 1
-
-                    Rectangle {
-                        opacity: GlobalStates.screenLocked ? 1 : 0
-                        anchors.fill: parent
-                        color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.7)
-                    }
+            // Lock screen dim over wayhaven's blurred wallpaper
+            Rectangle {
+                anchors.fill: parent
+                color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.7)
+                opacity: bgRoot.shouldBlur ? 1 : 0
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
             }
 

@@ -196,7 +196,7 @@ hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur_popups = true})
 hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:.*" }, ignore_alpha = 0.79})
 -- These panels request blur themselves via ext-background-effect-v1 (BackgroundEffect.blurRegion)
-for _, ns in ipairs({ "bar", "verticalBar", "dock", "sidebarLeft", "sidebarRight", "overview", "cheatsheet", "osk",
+for _, ns in ipairs({ "background", "bar", "verticalBar", "dock", "sidebarLeft", "sidebarRight", "overview", "cheatsheet", "osk",
     "wallpaperSelector", "notificationPopup", "onScreenDisplay", "desktopMenu", "fileBasket", "reloadPopup", "widgetEditor", "session" }) do
     hl.layer_rule({ match = { namespace = "quickshell:" .. ns }, blur = false, blur_popups = false, ignore_alpha = 0 })
 end
