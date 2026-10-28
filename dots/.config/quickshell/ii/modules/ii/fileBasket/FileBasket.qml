@@ -98,7 +98,8 @@ Scope {
             exclusiveZone: 0
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:fileBasket"
-            BackgroundEffect.blurRegion: BlurRegion { items: [basketBackground] }
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: basketWindow.blurItems }
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             implicitWidth: basketSize + 12

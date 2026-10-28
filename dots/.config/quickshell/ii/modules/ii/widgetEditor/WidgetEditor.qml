@@ -39,7 +39,8 @@ Scope {
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:widgetEditor"
-            BackgroundEffect.blurRegion: BlurRegion { items: [settingsCard, pickerBar] }
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: editorWindow.blurItems }
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
@@ -116,27 +117,6 @@ Scope {
                         text: Translation.tr("Blur widgets")
                         checked: Config.options.background.widgets.blurWidgets
                         onCheckedChanged: Config.options.background.widgets.blurWidgets = checked
-                    }
-                    ConfigSwitch {
-                        Layout.fillWidth: true
-                        visible: Config.options.background.widgets.blurWidgets
-                        buttonIcon: "blur_circular"
-                        text: Translation.tr("Compositor blur")
-                        checked: Config.options.appearance.blur.compositor
-                        onCheckedChanged: Config.options.appearance.blur.compositor = checked
-                    }
-                    ConfigSlider {
-                        Layout.fillWidth: true
-                        showLabel: false
-                        // The compositor's blur strength comes from its own settings
-                        visible: Config.options.background.widgets.blurWidgets && !Config.options.appearance.blur.compositor
-                        value: Config.options.appearance.blur.radius ?? 32
-                        usePercentTooltip: false
-                        buttonIcon: "aspect_ratio"
-                        from: 1
-                        to: 64
-                        stopIndicatorValues: [32]
-                        onValueChanged: Config.options.appearance.blur.radius = value
                     }
                 }
             }

@@ -69,6 +69,7 @@ Item {
 
     StyledRectangularShadow {
         target: sidebarRightBackground
+        visible: GlobalStates.sidebarRightOpen // gone before the close snapshot (CloseHold)
     }
     Rectangle {
         id: sidebarRightBackground

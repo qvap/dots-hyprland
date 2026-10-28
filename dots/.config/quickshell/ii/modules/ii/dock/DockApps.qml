@@ -148,7 +148,8 @@ Item {
         }
 
         visible: popupBackground.opacity > 0
-        BackgroundEffect.blurRegion: BlurRegion { items: [popupBackground] }
+        property list<Item> blurItems: [] // filled by BlurSource children
+        BackgroundEffect.blurRegion: BlurRegion { items: previewPopup.blurItems }
         color: "transparent"
         implicitWidth: root.QsWindow.window?.width ?? 1
         implicitHeight: popupMouseArea.implicitHeight + root.windowControlsHeight + Appearance.sizes.elevationMargin * 2

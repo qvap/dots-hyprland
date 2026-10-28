@@ -91,8 +91,8 @@ Variants {
             }
         }
         WlrLayershell.namespace: "quickshell:background"
-        property list<Item> blurItems: [] // widget backgrounds in compositor blur mode (BlurSource)
-        BackgroundEffect.blurRegion: BlurRegion { items: bgRoot.blurItems }
+        property list<Item> blurItems: [] // filled by BlurSource children
+        BackgroundEffect.blurRegion: BlurRegion { items: bgRoot.blurItems; inset: 1 } // wl_region is pixel-aligned: keep its stair-stepped edge under the tint
         // Desktop widgets take the keyboard while being edited (text entry, Del to remove)
         WlrLayershell.keyboardFocus: GlobalStates.desktopWidgetKeyboardFocus ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         anchors {
@@ -202,7 +202,7 @@ Variants {
             }
 
             // Not drawn (wayhaven shows the wallpaper): an invisible copy laid out exactly like it, which the
-            // shell-side blur/glass of widgets samples. Only loaded while one of those effects is on.
+            // frosted glass of widgets samples. Only loaded while glass is on.
             StyledImage {
                 id: wallpaper
                 opacity: 0 // ShaderEffectSource still captures it
@@ -254,9 +254,7 @@ Variants {
                     return - bgRoot.parallaxTotalPixelsY * usedFractionY;
                 }
 
-                readonly property bool needed: Config.options.background.widgets.glass.enable
-                    || (Config.options.background.widgets.blurWidgets && !Config.options.appearance.blur.compositor)
-                source: (bgRoot.wallpaperSafetyTriggered || !needed) ? "" : bgRoot.wallpaperPath
+                source: (bgRoot.wallpaperSafetyTriggered || !Config.options.background.widgets.glass.enable) ? "" : bgRoot.wallpaperPath
                 fillMode: Image.PreserveAspectCrop
                 Behavior on x {
                     NumberAnimation {

@@ -46,7 +46,8 @@ Scope {
             implicitHeight: rect.height + 8 * 2
 
             WlrLayershell.namespace: "quickshell:reloadPopup"
-            BackgroundEffect.blurRegion: BlurRegion { items: [rect] }
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: popup.blurItems }
 
             // color blending is a bit odd as detailed in the type reference.
             color: "transparent"

@@ -22,11 +22,7 @@ Item {
     property real hangLeft: 0
     property real hangRight: 0
     property int edge: 0
-    // Plain blurred wallpaper instead of glass: the shell-side fallback when compositor blur is off (BlurSource)
-    property bool blurMode: false
-    readonly property bool live: blurMode
-        ? !(Config.options?.appearance?.blur?.compositor ?? true)
-        : glassEnabled && (Config.options?.background?.widgets?.glass?.enable ?? false)
+    readonly property bool live: glassEnabled && (Config.options?.background?.widgets?.glass?.enable ?? false)
     readonly property bool tracking: live && (win?.visible ?? true)
 
     // Re-read on Window.window changes: items created before they are in a window (Loaders) get it only later
@@ -45,14 +41,14 @@ Item {
     property real floatY: 0
 
     function panelOffset(w, s) {
+        // A guess ignoring other layers' exclusive zones; layerOffset() finds the real spot
         const a = w.anchors
         const m = w.margins
-        const pushed = w.exclusionMode !== ExclusionMode.Ignore
-        const x = a?.left ? (m?.left ?? 0) + (pushed ? GlassLayers.leftZone : 0)
-            : a?.right ? s.width - w.width - (m?.right ?? 0) - (pushed ? GlassLayers.rightZone : 0)
+        const x = a?.left ? (m?.left ?? 0)
+            : a?.right ? s.width - w.width - (m?.right ?? 0)
             : (s.width - w.width) / 2
-        const y = a?.top ? (m?.top ?? 0) + (pushed ? GlassLayers.topZone : 0)
-            : a?.bottom ? s.height - w.height - (m?.bottom ?? 0) - (pushed ? GlassLayers.bottomZone : 0)
+        const y = a?.top ? (m?.top ?? 0)
+            : a?.bottom ? s.height - w.height - (m?.bottom ?? 0)
             : (s.height - w.height) / 2
         return layerOffset(w, s, Qt.point(x, y))
     }
@@ -201,19 +197,8 @@ Item {
                 cache: true
             }
 
-            FastBlurred {
-                anchors.fill: parent
-                visible: root.blurMode
-                blurSource: wallpaperImage
-                cardRadius: root.cardRadius
-                tintOpacity: 0
-                trackX: wallpaperImage.x
-                trackY: wallpaperImage.y
-            }
-
             FrostedGlass {
                 anchors.fill: parent
-                visible: !root.blurMode
                 blurSource: wallpaperImage
                 cardRadius: root.cardRadius
                 topLeftRadius: root.topLeftRadius

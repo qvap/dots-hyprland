@@ -46,7 +46,8 @@ Scope { // Scope
             implicitWidth: cheatsheetBackground.width + Appearance.sizes.elevationMargin * 2
             implicitHeight: cheatsheetBackground.height + Appearance.sizes.elevationMargin * 2
             WlrLayershell.namespace: "quickshell:cheatsheet"
-            BackgroundEffect.blurRegion: BlurRegion { items: [cheatsheetBackground] }
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: cheatsheetRoot.blurItems }
             // Setting this value makes it take its sweet time to open
             // WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
             color: "transparent"

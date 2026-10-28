@@ -88,7 +88,11 @@ Scope { // Scope
 
         sourceComponent: PanelWindow { // Window
             id: panelWindow
-            visible: GlobalStates.sidebarLeftOpen
+            visible: closeHold.mapped
+            CloseHold {
+                id: closeHold
+                open: GlobalStates.sidebarLeftOpen
+            }
 
             property bool extend: false
             property real sidebarWidth: panelWindow.extend ? Appearance.sizes.sidebarWidthExtended : Appearance.sizes.sidebarWidth
@@ -102,7 +106,8 @@ Scope { // Scope
             exclusiveZone: root.pin ? sidebarWidth : 0
             implicitWidth: Appearance.sizes.sidebarWidthExtended + Appearance.sizes.elevationMargin
             WlrLayershell.namespace: "quickshell:sidebarLeft"
-            BackgroundEffect.blurRegion: BlurRegion { items: [sidebarLeftBackground] }
+            property list<Item> blurItems: [] // filled by BlurSource children
+            BackgroundEffect.blurRegion: BlurRegion { items: panelWindow.blurItems }
             // Hyprland 0.49: OnDemand is Exclusive, Exclusive just breaks click-outside-to-close
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
             color: "transparent"
@@ -135,6 +140,7 @@ Scope { // Scope
             StyledRectangularShadow {
                 target: sidebarLeftBackground
                 radius: sidebarLeftBackground.radius
+                visible: GlobalStates.sidebarLeftOpen // gone before the close snapshot (CloseHold)
             }
             Rectangle {
                 id: sidebarLeftBackground

@@ -137,9 +137,7 @@ Scope {
                         height: barRoot.cornerOpenCutHeight
                     }
                 }
-                BackgroundEffect.blurRegion: BlurRegion {
-                    items: [barContent.background, ...barRoot.blurItems]
-                }
+                BackgroundEffect.blurRegion: BlurRegion { items: barRoot.blurItems }
                 color: "transparent"
 
                 // Positioning

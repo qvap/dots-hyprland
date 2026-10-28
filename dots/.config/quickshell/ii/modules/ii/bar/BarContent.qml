@@ -11,7 +11,6 @@ import qs.modules.common.functions
 
 Item {
     id: root
-    readonly property alias background: barBackground
     implicitHeight: Appearance.sizes.barHeight
     width: parent.width
     readonly property real barPadding: 0

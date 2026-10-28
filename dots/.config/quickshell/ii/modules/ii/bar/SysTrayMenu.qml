@@ -19,7 +19,8 @@ PopupWindow {
     signal menuOpened(qsWindow: var) // Correct type is QsWindow, but QML does not like that
 
     color: "transparent"
-    BackgroundEffect.blurRegion: BlurRegion { items: [popupBackground] }
+    property list<Item> blurItems: [] // filled by BlurSource children
+    BackgroundEffect.blurRegion: BlurRegion { items: root.blurItems }
     property real padding: Appearance.sizes.elevationMargin
 
     implicitHeight: {

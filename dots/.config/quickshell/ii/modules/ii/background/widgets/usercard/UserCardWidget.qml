@@ -304,12 +304,9 @@ AbstractBackgroundWidget {
 
                 FastBlurred {
                     anchors.fill: parent
-                    blurSource: root.wallpaperItem
                     cardRadius: Appearance.rounding?.verylarge ?? 30
                     tint: Appearance.colors.colLayer1
                     tintOpacity: 0.55
-                    trackX: root.x  
-                    trackY: root.y
                     visible: Config.options.background.widgets.blurWidgets 
                 }
 

@@ -70,6 +70,7 @@ Item {
 
     StyledRectangularShadow {
         target: overviewBackground
+        visible: GlobalStates.overviewOpen // gone before the close snapshot (CloseHold)
     }
     Rectangle { // Background
         id: overviewBackground

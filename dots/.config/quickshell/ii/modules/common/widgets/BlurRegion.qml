@@ -1,47 +1,49 @@
 import QtQuick
 import Quickshell
-import qs.modules.common
 
-// Compositor-side blur (ext-background-effect-v1) under each visible, non-transparent item.
-// Use as `BackgroundEffect.blurRegion: BlurRegion { items: [...] }` on a window.
+// Compositor blur (ext-background-effect-v1) under every BlurSource of a window:
+// `BackgroundEffect.blurRegion: BlurRegion { items: blurItems }` (BlurSources add themselves to `blurItems`)
 Region {
     id: root
     property list<Item> items
-    // Mapped rects don't track geometry by themselves; bumping this re-reads them without clearing the region
-    property int revision: 0
-    // Shrinks each rect (and its corner radius) so the pixel-aligned region stays inside antialiased edges
+    // Shrinks each rect (and its corners) so the pixel-aligned region stays inside antialiased edges
     property real inset: 0
-    onItemsChanged: revision++
 
-    regions: itemRegions.instances
-    property Variants itemRegions: Variants {
-        // Shell-side blur instead (BlurSource) when compositor blur is off
-        model: Config.options.appearance.blur.compositor ? root.items : []
+    regions: sourceRegions.instances
+    property Variants sourceRegions: Variants {
+        model: root.items
         Region {
-            id: itemRegion
+            id: sourceRegion
             required property Item modelData
-            readonly property bool shown: modelData && modelData.visible && modelData.opacity > 0 && (modelData.color?.a ?? 1) > 0
-            // Mapped to window coordinates so parent movement and transforms (e.g. a scale-in transition) are included
-            readonly property rect mapped: {
-                root.revision;
-                return shown ? modelData.mapToItem(null, 0, 0, modelData.width, modelData.height) : Qt.rect(0, 0, 0, 0);
-            }
-            x: mapped.x + root.inset
-            y: mapped.y + root.inset
-            width: Math.max(0, mapped.width - root.inset * 2)
-            height: Math.max(0, mapped.height - root.inset * 2)
-            radius: shown && modelData.width > 0 ? Math.max(0, Math.max(modelData.radius ?? 0, modelData.topLeftRadius ?? 0) * mapped.width / modelData.width - root.inset) : 0
+            readonly property rect area: modelData.area
+            readonly property var radii: modelData.radii
+            readonly property bool shaped: modelData.shaped
+            // Region coordinates are ints: snap every edge inwards instead of letting both truncate leftwards
+            readonly property int left: Math.ceil(area.x + root.inset)
+            readonly property int top: Math.ceil(area.y + root.inset)
+            x: left
+            y: top
+            width: shaped ? 0 : Math.max(0, Math.floor(area.x + area.width - root.inset) - left)
+            height: shaped ? 0 : Math.max(0, Math.floor(area.y + area.height - root.inset) - top)
+            topLeftRadius: Math.max(0, radii[0] - root.inset)
+            topRightRadius: Math.max(0, radii[1] - root.inset)
+            bottomRightRadius: Math.max(0, radii[2] - root.inset)
+            bottomLeftRadius: Math.max(0, radii[3] - root.inset)
 
-            component GeometryWatcher: Connections {
-                function onXChanged() { root.revision++; }
-                function onYChanged() { root.revision++; }
-                function onWidthChanged() { root.revision++; }
-                function onHeightChanged() { root.revision++; }
-                function onScaleChanged() { root.revision++; }
+            // A shaped source is the union of its covered rows instead
+            regions: shapeParts.instances
+            property Variants shapeParts: Variants {
+                model: sourceRegion.shaped && sourceRegion.area.width > 0 ? sourceRegion.modelData.shapeRects : []
+                Region {
+                    required property rect modelData
+                    readonly property real scale: sourceRegion.area.width / Math.max(1, sourceRegion.modelData.target.width)
+                    readonly property int left: Math.ceil(sourceRegion.area.x + modelData.x * scale + root.inset)
+                    x: left
+                    y: Math.round(sourceRegion.area.y + modelData.y * scale)
+                    width: Math.max(0, Math.floor(sourceRegion.area.x + (modelData.x + modelData.width) * scale - root.inset) - left)
+                    height: Math.round(modelData.height * scale)
+                }
             }
-            property GeometryWatcher selfWatcher: GeometryWatcher { target: itemRegion.modelData }
-            property GeometryWatcher parentWatcher: GeometryWatcher { target: itemRegion.modelData?.parent ?? null }
-            property GeometryWatcher grandparentWatcher: GeometryWatcher { target: itemRegion.modelData?.parent?.parent ?? null }
         }
     }
 }

@@ -131,16 +131,13 @@ Item {
             }
         }
 
-        // Blurred wallpaper, masked by the cookie shape
+        // Tint masked by the cookie shape; the compositor blurs behind exactly that shape
         FastBlurred {
             id: cookieBlur
             anchors.fill: parent
-            blurSource: root.wallpaperItem
             cardRadius: 0
             tint: Appearance.colors.colLayer1
             tintOpacity: 0.55
-            trackX: root.originX + root.x
-            trackY: root.originY + root.y
             visible: false
         }
         OpacityMask {
@@ -149,6 +146,11 @@ Item {
             maskSource: root.useSineCookie ? sineCookieLoader.item : roundedPolygonCookieLoader.item
             z: 0
             visible: root.blurWidgets
+            BlurSource {
+                active: root.blurWidgets
+                shaped: true
+                shapeKey: [Config.options.background.widgets.clock.cookie.sides, root.useSineCookie, root.implicitSize].join()
+            }
         }
     }
 

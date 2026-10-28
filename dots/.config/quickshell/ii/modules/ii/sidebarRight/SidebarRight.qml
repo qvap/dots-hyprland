@@ -14,7 +14,11 @@ Scope {
 
     PanelWindow {
         id: panelWindow
-        visible: GlobalStates.sidebarRightOpen
+        visible: closeHold.mapped
+        CloseHold {
+            id: closeHold
+            open: GlobalStates.sidebarRightOpen
+        }
 
         function hide() {
             GlobalStates.sidebarRightOpen = false;
@@ -50,7 +54,7 @@ Scope {
 
         Loader {
             id: sidebarContentLoader
-            active: GlobalStates.sidebarRightOpen || Config?.options.sidebar.keepRightSidebarLoaded
+            active: closeHold.mapped || Config?.options.sidebar.keepRightSidebarLoaded
             anchors {
                 fill: parent
                 margins: Appearance.sizes.hyprlandGapsOut

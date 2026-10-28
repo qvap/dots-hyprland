@@ -20,7 +20,11 @@ Scope {
         property string searchingText: ""
         readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
         property bool monitorIsFocused: (Hyprland.focusedMonitor?.id == monitor?.id)
-        visible: GlobalStates.overviewOpen
+        visible: closeHold.mapped
+        CloseHold {
+            id: closeHold
+            open: GlobalStates.overviewOpen
+        }
 
         WlrLayershell.namespace: "quickshell:overview"
         property list<Item> blurItems: [] // filled by BlurSource children
@@ -72,7 +76,7 @@ Scope {
 
         Column {
             id: columnLayout
-            visible: GlobalStates.overviewOpen
+            visible: closeHold.mapped
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 top: Config.options.overview.center ? undefined : parent.top
@@ -98,7 +102,7 @@ Scope {
                 id: overviewLoader
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: panelWindow.searchingText == ""
-                active: GlobalStates.overviewOpen && (Config?.options.overview.enable ?? true)
+                active: closeHold.mapped && (Config?.options.overview.enable ?? true)
                 sourceComponent: OverviewWidget {
                     screen: panelWindow.screen
                 }

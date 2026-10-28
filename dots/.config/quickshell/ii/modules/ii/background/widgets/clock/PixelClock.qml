@@ -72,6 +72,13 @@ Item {
         id: glyphStage
         anchors.fill: parent
 
+        // The compositor blurs behind the glyphs themselves
+        BlurSource {
+            active: root.blurWidgets
+            shaped: true
+            shapeKey: [root.glyphTopLeft, root.glyphTopRight, root.glyphBottomLeft, root.glyphBottomRight, root.isVertical].join()
+        }
+
         component GlyphTile: Text {
             width: root.tileW
             height: root.tileH
@@ -130,11 +137,8 @@ Item {
             width: root.tileW
             height: root.tileH
             cardRadius: 0
-            blurSource: root.wallpaperItem
             tint: root.tintSoft
             tintOpacity: 0.55
-            trackX: root.originX + root.pos0X
-            trackY: root.originY + root.pos0Y
             visible: false
         }
         OpacityMask {
@@ -187,11 +191,8 @@ Item {
             width: root.tileW
             height: root.tileH
             cardRadius: 0
-            blurSource: root.wallpaperItem
             tint: root.tintBold
             tintOpacity: 0.55
-            trackX: root.originX + root.pos1X
-            trackY: root.originY + root.pos1Y
             visible: false
         }
         OpacityMask {
@@ -243,11 +244,8 @@ Item {
             width: root.tileW
             height: root.tileH
             cardRadius: 0
-            blurSource: root.wallpaperItem
             tint: root.tintBold
             tintOpacity: 0.55
-            trackX: root.originX + root.pos2X
-            trackY: root.originY + root.pos2Y
             visible: false
         }
         OpacityMask {
@@ -285,11 +283,8 @@ Item {
             width: root.tileW
             height: root.tileH
             cardRadius: 0
-            blurSource: root.wallpaperItem
             tint: root.tintSoft
             tintOpacity: 0.55
-            trackX: root.originX + root.pos3X
-            trackY: root.originY + root.pos3Y
             visible: false
         }
         OpacityMask {
@@ -311,16 +306,13 @@ Item {
                 width: root.colonDotSize
                 height: root.colonDotSize
                 radius: width / 2
-                color: root.tintBold
+                color: root.blurWidgets ? "transparent" : root.tintBold
                 anchors.horizontalCenter: parent.horizontalCenter
                 FastBlurred {
                     anchors.fill: parent
                     cardRadius: width / 2
-                    blurSource: root.wallpaperItem
                     tint: root.tintBold
                     tintOpacity: 0.55
-                    trackX: root.originX + root.colonX
-                    trackY: root.originY + root.pos0Y + root.tileH / 2 - height / 2
                     visible: root.blurWidgets
                 }
             }
@@ -328,16 +320,13 @@ Item {
                 width: root.colonDotSize
                 height: root.colonDotSize
                 radius: width / 2
-                color: root.tintBold
+                color: root.blurWidgets ? "transparent" : root.tintBold
                 anchors.horizontalCenter: parent.horizontalCenter
                 FastBlurred {
                     anchors.fill: parent
                     cardRadius: width / 2
-                    blurSource: root.wallpaperItem
                     tint: root.tintBold
                     tintOpacity: 0.55
-                    trackX: root.originX + root.colonX
-                    trackY: root.originY + root.pos0Y + root.tileH / 2 - height / 2 + root.colonGap + root.colonDotSize
                     visible: root.blurWidgets
                 }
             }

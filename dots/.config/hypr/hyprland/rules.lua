@@ -192,17 +192,12 @@ hl.layer_rule({ match = { namespace = "osk[0-9]*" }, ignore_alpha = 0.6})
 
 -- Quickshell
 -- Quickshell: illogical-impulse
-hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur_popups = true})
-hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur = true})
-hl.layer_rule({ match = { namespace = "quickshell:.*" }, ignore_alpha = 0.79})
--- These panels request blur themselves via ext-background-effect-v1 (BackgroundEffect.blurRegion)
-for _, ns in ipairs({ "background", "bar", "verticalBar", "dock", "sidebarLeft", "sidebarRight", "overview", "cheatsheet", "osk",
-    "wallpaperSelector", "notificationPopup", "onScreenDisplay", "desktopMenu", "fileBasket", "reloadPopup", "widgetEditor", "session" }) do
-    hl.layer_rule({ match = { namespace = "quickshell:" .. ns }, blur = false, blur_popups = false, ignore_alpha = 0 })
-end
--- Hyprland blurs the fade-out snapshot by alpha, ignoring the protocol region; keep shadows out of it
-for _, ns in ipairs({ "overview", "sidebarLeft", "sidebarRight" }) do
-    hl.layer_rule({ match = { namespace = "quickshell:" .. ns }, ignore_alpha = 0.5 })
+-- Panels ask for blur themselves through ext-background-effect-v1 (BlurRegion in the shell); a rule would blur them twice
+hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur = false, blur_popups = false, ignore_alpha = 0 })
+-- Layers that still rely on rule blur: waffle, hefty, ones shared with them, and the screen frame
+for _, ns in ipairs({ "actionCenter", "wNotificationCenter", "wOnScreenDisplay", "wStartMenu", "wTaskView",
+    "topLayerPanel", "edgeReservedArea", "polkit", "regionSelector", "screenframe" }) do
+    hl.layer_rule({ match = { namespace = "quickshell:" .. ns }, blur = true, blur_popups = true, ignore_alpha = 0.79 })
 end
 hl.layer_rule({ match = { namespace = "quickshell:background" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:bar" }, animation = "slide"})

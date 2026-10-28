@@ -53,7 +53,7 @@ AbstractBackgroundWidget {
             id: contentRect
             anchors.fill: parent
             widget: root
-            color: sizeMode === "4x1" || (blurred && Config.options.appearance.blur.compositor) ? "transparent" : Appearance.colors.colPrimaryContainer
+            color: sizeMode === "4x1" || blurred ? "transparent" : Appearance.colors.colPrimaryContainer
             shadowed: sizeMode !== "4x1" && Config.options.background.widgets.shadow
             blurred: Config.options.background.widgets.blurWidgets && sizeMode === "2x2"
             glass: sizeMode !== "4x1"
@@ -315,14 +315,11 @@ AbstractBackgroundWidget {
                         FastBlurred {
                             anchors.fill: parent
                             visible: Config.options.background.widgets.blurWidgets && !clockWrapper.glassOn
-                            blurSource: root.wallpaperItem
                             cardRadius: Appearance.rounding?.verylarge ?? 30
                             tint: (clockWrapper.cityData?.isDay ?? true)
                                 ? Appearance.colors.colPrimary
                                 : Appearance.colors.colLayer1
                             tintOpacity: 0.55
-                            trackX: root.x
-                            trackY: root.y
                         }
 
                         AndroidClock {

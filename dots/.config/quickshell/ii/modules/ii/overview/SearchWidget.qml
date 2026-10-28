@@ -118,6 +118,7 @@ Item { // Wrapper
 
     StyledRectangularShadow {
         target: searchWidgetContent
+        visible: GlobalStates.overviewOpen // gone before the close snapshot (CloseHold)
     }
     Rectangle { // Background
         id: searchWidgetContent
