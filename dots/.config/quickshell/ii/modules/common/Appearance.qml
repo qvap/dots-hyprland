@@ -144,7 +144,9 @@ Singleton {
         property color colLayer1Base: m3colors.m3surfaceContainerLow
         property color colLayer1: ColorUtils.solveOverlayColor(colLayer0Base, colLayer1Base, 1 - root.contentTransparency)
         property color colOnLayer1: m3colors.m3onSurfaceVariant
-        property color colOnLayer1Inactive: ColorUtils.mix(colOnLayer1, colLayer1, 0.45)
+        // Mixed with the opaque base so the text never inherits the surface's transparency, and dimmed
+        // less as the surface turns see-through: behind it is the wallpaper, not colLayer1
+        property color colOnLayer1Inactive: ColorUtils.mix(colOnLayer1, colLayer1Base, 0.45 + 0.4 * root.backgroundTransparency)
         property color colLayer1Hover: ColorUtils.transparentize(ColorUtils.mix(colLayer1, colOnLayer1, 0.92), root.contentTransparency)
         property color colLayer1Active: ColorUtils.transparentize(ColorUtils.mix(colLayer1, colOnLayer1, 0.85), root.contentTransparency)
         // Layer 2

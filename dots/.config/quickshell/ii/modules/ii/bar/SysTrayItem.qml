@@ -50,16 +50,7 @@ MouseArea {
             Component.onCompleted: this.open();
             trayItemMenuHandle: root.item.menu
             trayItemId: root.item.id
-            anchor {
-                window: root.QsWindow.window
-                item: root
-                gravity: Config.options.bar.vertical
-                    ? (Config.options.bar.bottom ? Edges.Left : Edges.Right)
-                    : (Config.options.bar.bottom ? Edges.Top : Edges.Bottom)
-                edges: Config.options.bar.vertical
-                    ? (Config.options.bar.bottom ? Edges.Left : Edges.Right)
-                    : (Config.options.bar.bottom ? Edges.Top : Edges.Bottom)
-            }
+            sourceItem: root
             onMenuOpened: (window) => root.menuOpened(window);
             onMenuClosed: {
                 root.menuClosed();

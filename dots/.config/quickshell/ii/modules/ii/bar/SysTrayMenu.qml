@@ -9,9 +9,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 
-PopupWindow {
+// A layer surface rather than a PopupWindow: Hyprland ignores ext-background-effect on xdg_popups,
+// so a popup could never get compositor blur
+PanelWindow {
     id: root
     required property QsMenuHandle trayItemMenuHandle
+    // The tray icon this menu opens from; the menu is centered on it along the bar
+    required property Item sourceItem
     property string trayItemId: ""
     property real popupBackgroundMargin: 0
 
@@ -19,6 +23,35 @@ PopupWindow {
     signal menuOpened(qsWindow: var) // Correct type is QsWindow, but QML does not like that
 
     color: "transparent"
+    property bool isOpen: false
+    visible: closeHold.mapped
+    CloseHold {
+        id: closeHold
+        open: root.isOpen
+        onMappedChanged: if (!mapped) {
+            while (stackView.depth > 1)
+                stackView.pop();
+            root.menuClosed();
+        }
+    }
+    screen: sourceItem.QsWindow.window?.screen ?? null
+    WlrLayershell.namespace: "quickshell:trayMenu"
+    WlrLayershell.layer: WlrLayer.Overlay
+    exclusionMode: ExclusionMode.Normal // sit next to the bar, not under it
+    anchors {
+        top: Config.options.bar.vertical || !Config.options.bar.bottom
+        bottom: !Config.options.bar.vertical && Config.options.bar.bottom
+        left: !Config.options.bar.vertical || !Config.options.bar.bottom
+        right: Config.options.bar.vertical && Config.options.bar.bottom
+    }
+    readonly property point sourceCenter: {
+        root.isOpen; // re-read on open
+        return sourceItem.mapToItem(null, sourceItem.width / 2, sourceItem.height / 2);
+    }
+    margins {
+        left: Config.options.bar.vertical ? 0 : Math.max(0, Math.min(sourceCenter.x - implicitWidth / 2, (screen?.width ?? 0) - implicitWidth))
+        top: Config.options.bar.vertical ? Math.max(0, Math.min(sourceCenter.y - implicitHeight / 2, (screen?.height ?? 0) - implicitHeight)) : 0
+    }
     property list<Item> blurItems: [] // filled by BlurSource children
     BackgroundEffect.blurRegion: BlurRegion { items: root.blurItems }
     property real padding: Appearance.sizes.elevationMargin
@@ -39,15 +72,12 @@ PopupWindow {
     }
 
     function open() {
-        root.visible = true;
+        root.isOpen = true;
         root.menuOpened(root);
     }
 
     function close() {
-        root.visible = false;
-        while (stackView.depth > 1)
-            stackView.pop();
-        root.menuClosed();
+        root.isOpen = false; // menuClosed follows once CloseHold unmaps the window
     }
 
     MouseArea {
@@ -61,6 +91,7 @@ PopupWindow {
         StyledRectangularShadow {
             target: popupBackground
             opacity: popupBackground.opacity
+            visible: root.isOpen // gone before the close snapshot (CloseHold)
         }
 
         Rectangle {
