@@ -124,13 +124,13 @@ NestableObject {
     function applyMonitor(m) {
         if (!m.name) return
 
-        const base = `${m.name},${m.currentMode},${m.x}x${m.y},${m.scale}`
-        applyProc.command = ["hyprctl", "keyword", "monitor",
-            m.disabled
-                ? `${m.name},disable`
-                : (m.transform && m.transform !== 0)
-                    ? `${base},transform,${m.transform}`
-                    : base]
+        // Hyprland 0.57 dropped `hyprctl keyword`; apply through the Lua API instead
+        const fields = m.disabled
+            ? `output = ${JSON.stringify(m.name)}, disabled = true`
+            : `output = ${JSON.stringify(m.name)}, mode = ${JSON.stringify(m.currentMode)}, `
+                + `position = "${m.x}x${m.y}", scale = ${JSON.stringify(String(m.scale))}`
+                + ((m.transform && m.transform !== 0) ? `, transform = ${m.transform}` : "")
+        applyProc.command = ["hyprctl", "eval", `hl.monitor({ ${fields} })`]
         applyProc.running = true
     }
 
