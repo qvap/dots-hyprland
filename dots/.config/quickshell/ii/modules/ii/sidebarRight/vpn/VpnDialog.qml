@@ -166,6 +166,34 @@ WindowDialog {
             font.weight: 600
             color: Appearance.colors.colOnLayer0
         }
+
+        // The provider: name · traffic · expiry
+        StyledText {
+            readonly property var parts: [Vpn.providerTitle, Vpn.trafficText, Vpn.expiryText].filter(t => t !== "")
+            visible: Vpn.hasSubscription && parts.length > 0
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            text: parts.join(" · ")
+            elide: Text.ElideRight
+            color: Vpn.expiringSoon ? Appearance.colors.colError : Appearance.colors.colSubtext
+            font.pixelSize: Appearance.font.pixelSize.smaller
+        }
+    }
+
+    NoticeBox {
+        visible: Vpn.hasSubscription && (Vpn.expiringSoon || (Vpn.provider?.announce ?? "") !== "" || Vpn.updateAvailable)
+        Layout.fillWidth: true
+        Layout.bottomMargin: 6
+        materialIcon: Vpn.expiringSoon ? "event_busy" : Vpn.updateAvailable ? "update" : "campaign"
+        color: Vpn.expiringSoon ? Appearance.colors.colErrorContainer : Appearance.colors.colPrimaryContainer
+        text: Vpn.expiringSoon ? (Vpn.provider?.expiryBanner?.text || (Vpn.expired ? Translation.tr("The VPN subscription has expired") : Translation.tr("The subscription expires soon: %1").arg(Vpn.expiryText))) : Vpn.updateAvailable ? Translation.tr("The provider has changed the node list.") : (Vpn.provider?.announce ?? "")
+
+        StyledButton {
+            visible: Vpn.updateAvailable && !Vpn.expiringSoon
+            text: Vpn.busy === "update" ? Translation.tr("Updating...") : Translation.tr("Update subscription")
+            enabled: Vpn.busy === ""
+            onClicked: Vpn.updateSubscription()
+        }
     }
 
     ColumnLayout {

@@ -538,6 +538,54 @@ ApplicationWindow {
         }
 
         ContentSection {
+            visible: Vpn.hasSubscription && (Vpn.providerTitle !== "" || Vpn.traffic !== null || Vpn.expire > 0 || (Vpn.provider?.announce ?? "") !== "" || Vpn.provider?.banner || Vpn.updateAvailable)
+            icon: "storefront"
+            title: Translation.tr("Provider")
+
+            ProviderCard {}
+
+            // The provider's announcement / banner / expiry banner
+            NoticeBox {
+                visible: (Vpn.provider?.announce ?? "") !== ""
+                Layout.fillWidth: true
+                materialIcon: "campaign"
+                text: Vpn.provider?.announce ?? ""
+
+                StyledButton {
+                    visible: (Vpn.provider?.announceUrl ?? "") !== ""
+                    text: Translation.tr("Open")
+                    onClicked: Vpn.openProviderLink(Vpn.provider.announceUrl)
+                }
+            }
+
+            ProviderBanner {
+                banner: Vpn.provider?.banner ?? null
+            }
+
+            ProviderBanner {
+                visible: Vpn.expiringSoon
+                banner: Vpn.provider?.expiryBanner ?? {
+                    "text": Vpn.expired ? Translation.tr("The subscription has expired. Renew it with the provider to keep the VPN working.") : Translation.tr("The subscription expires soon: %1").arg(Vpn.expiryText),
+                    "url": Vpn.provider?.webPageUrl || Vpn.provider?.supportUrl || ""
+                }
+                alert: true
+            }
+
+            NoticeBox {
+                visible: Vpn.updateAvailable
+                Layout.fillWidth: true
+                materialIcon: "update"
+                text: Translation.tr("The provider has changed the node list.")
+
+                StyledButton {
+                    text: Vpn.busy === "update" ? Translation.tr("Updating...") : Translation.tr("Update subscription")
+                    enabled: Vpn.busy === ""
+                    onClicked: Vpn.updateSubscription()
+                }
+            }
+        }
+
+        ContentSection {
             icon: "settings_backup_restore"
             title: Translation.tr("Subscription")
 
@@ -569,6 +617,18 @@ ApplicationWindow {
                     enabled: Vpn.busy === "" && Vpn.hasSubscription
                     onClicked: Vpn.updateSubscription()
                 }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "fingerprint"
+                text: Translation.tr("Send device ID")
+                checked: Config.options.vpn.sendHwid
+                onCheckedChanged: Config.options.vpn.sendHwid = checked
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                text: Translation.tr("Some providers limit the number of devices and refuse a subscription request without a device ID (x-hwid). The ID is derived from the machine ID and is the same for every request. The info from the provider (traffic, expiry, its routing) is refreshed by itself at the interval it asks for.")
             }
         }
 
@@ -784,6 +844,11 @@ ApplicationWindow {
                         displayName: Translation.tr("Direct"),
                         icon: "public",
                         value: "direct"
+                    },
+                    {
+                        displayName: Translation.tr("As the provider says"),
+                        icon: "storefront",
+                        value: "provider"
                     }
                 ]
             }
@@ -991,6 +1056,102 @@ ApplicationWindow {
         }
 
         ContentSection {
+            icon: "storefront"
+            title: Translation.tr("From the provider")
+
+            StyledText {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colSubtext
+                text: {
+                    const info = Vpn.provider?.routingInfo ?? {};
+                    const r = Vpn.providerRouting;
+                    if (!Vpn.hasSubscription)
+                        return Translation.tr("Load a subscription first.");
+                    let parts = [];
+                    if (Vpn.providerRuleCount > 0)
+                        parts.push(Translation.tr("Routing profile %1: %2 rules").arg(info.name ? `«${info.name}»` : "").arg(Vpn.providerRuleCount));
+                    if (r.dns)
+                        parts.push(Translation.tr("DNS servers"));
+                    if (r.fakeip)
+                        parts.push("FakeDNS");
+                    if (r.fragment)
+                        parts.push(Translation.tr("TLS fragmentation"));
+                    if (r.sort === "name")
+                        parts.push(Translation.tr("nodes sorted by name"));
+                    if (info.final)
+                        parts.push(Translation.tr("unmatched traffic: %1").arg(info.final === "direct" ? Translation.tr("Direct") : Translation.tr("Through VPN")));
+                    let t = parts.length > 0 ? Translation.tr("The provider sends: %1.").arg(parts.join(", ")) : Translation.tr("The provider sends no routing of its own.");
+                    if ((info.dropped ?? 0) > 0)
+                        t += " " + Translation.tr("Entries without an equivalent here (Xray-only matchers): %1, left out.").arg(info.dropped);
+                    return t + " " + Translation.tr("It is merged in by itself and refreshed with the subscription: its rules go after yours, so yours win.");
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "alt_route"
+                text: Translation.tr("Provider's routing rules")
+                checked: Config.options.vpn.routing.useProviderRules
+                onCheckedChanged: Config.options.vpn.routing.useProviderRules = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "dns"
+                text: Translation.tr("Provider's DNS")
+                checked: Config.options.vpn.routing.useProviderDns
+                onCheckedChanged: Config.options.vpn.routing.useProviderDns = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "splitscreen"
+                text: Translation.tr("TLS fragmentation (if the provider asks)")
+                checked: Config.options.vpn.routing.useProviderFragment
+                onCheckedChanged: Config.options.vpn.routing.useProviderFragment = checked
+            }
+
+            Repeater {
+                model: Config.options.vpn.routing.useProviderRules ? (Vpn.providerRouting.rules ?? []) : []
+                delegate: Rectangle {
+                    id: providerRuleDelegate
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: providerRuleRow.implicitHeight + 18
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colLayer1
+                    opacity: 0.85
+
+                    RowLayout {
+                        id: providerRuleRow
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                            leftMargin: 14
+                            rightMargin: 14
+                        }
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: providerRuleDelegate.modelData.action === "block" ? "block" : providerRuleDelegate.modelData.action === "direct" ? "public" : "vpn_lock"
+                            iconSize: 20
+                            color: Appearance.colors.colOnLayer1
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: (providerRuleDelegate.modelData.match ?? []).join(", ")
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                        }
+                    }
+                }
+            }
+        }
+
+        ContentSection {
             icon: "dns"
             title: Translation.tr("DNS")
 
@@ -1004,6 +1165,14 @@ ApplicationWindow {
             NoticeBox {
                 Layout.fillWidth: true
                 text: Translation.tr("FakeIP speeds up DNS resolution and prevents leaks, but may break some apps (Spotify, Discord, games). Disabled by default.")
+            }
+
+            StyledText {
+                visible: Config.options.vpn.routing.useProviderDns && Vpn.providerRouting.dns?.remote !== undefined
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colSubtext
+                text: Translation.tr("The provider's remote DNS server (%1) is used instead of this one; turn off \"Provider's DNS\" to use yours.").arg(Vpn.providerRouting.dns?.remote?.server ?? "")
             }
 
             MaterialTextField {
@@ -1205,6 +1374,126 @@ ApplicationWindow {
                     }
                 }
             }
+        }
+    }
+
+    // Title, traffic and expiry from the provider, its links
+    component ProviderCard: Rectangle {
+        Layout.fillWidth: true
+        implicitHeight: providerColumn.implicitHeight + 28
+        radius: Appearance.rounding.large
+        color: Appearance.colors.colLayer1
+
+        ColumnLayout {
+            id: providerColumn
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: 18
+                rightMargin: 18
+            }
+            spacing: 8
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Vpn.providerTitle !== "" ? Vpn.providerTitle : Translation.tr("Subscription")
+                elide: Text.ElideRight
+                font.pixelSize: Appearance.font.pixelSize.larger
+                font.weight: Font.Medium
+                color: Appearance.colors.colOnLayer1
+            }
+
+            StyledText {
+                visible: Vpn.providerDescription !== ""
+                Layout.fillWidth: true
+                text: Vpn.providerDescription
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.smaller
+            }
+
+            RowLayout {
+                visible: Vpn.trafficText !== ""
+                Layout.fillWidth: true
+                spacing: 10
+                MaterialSymbol {
+                    text: "data_usage"
+                    iconSize: 20
+                    color: Appearance.colors.colOnLayer1
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Traffic") + ": " + Vpn.trafficText
+                    color: Appearance.colors.colOnLayer1
+                }
+            }
+
+            StyledProgressBar {
+                visible: Vpn.trafficTotal > 0
+                Layout.fillWidth: true
+                value: Math.min(1, Vpn.trafficUsed / Math.max(1, Vpn.trafficTotal))
+                highlightColor: value > 0.9 ? Appearance.colors.colError : Appearance.colors.colPrimary
+            }
+
+            RowLayout {
+                visible: Vpn.expiryText !== ""
+                Layout.fillWidth: true
+                spacing: 10
+                MaterialSymbol {
+                    text: Vpn.expiringSoon ? "event_busy" : "event"
+                    iconSize: 20
+                    color: Vpn.expiringSoon ? Appearance.colors.colError : Appearance.colors.colOnLayer1
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Vpn.expiryText
+                    color: Vpn.expiringSoon ? Appearance.colors.colError : Appearance.colors.colOnLayer1
+                }
+            }
+
+            RowLayout {
+                visible: (Vpn.provider?.supportUrl ?? "") !== "" || (Vpn.provider?.webPageUrl ?? "") !== ""
+                Layout.fillWidth: true
+                spacing: 8
+                StyledButton {
+                    visible: (Vpn.provider?.supportUrl ?? "") !== ""
+                    text: Translation.tr("Support")
+                    onClicked: Vpn.openProviderLink(Vpn.provider.supportUrl)
+                }
+                StyledButton {
+                    visible: (Vpn.provider?.webPageUrl ?? "") !== ""
+                    text: Translation.tr("Website")
+                    onClicked: Vpn.openProviderLink(Vpn.provider.webPageUrl)
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                StyledText {
+                    text: Vpn.isChecking ? Translation.tr("Checking...") : (Vpn.provider?.fetched ? Translation.tr("Updated %1").arg(new Date(Vpn.provider.fetched * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat)) : "")
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                }
+            }
+        }
+    }
+
+    // A provider's banner { text, buttonText, url, color, buttonColor }
+    component ProviderBanner: NoticeBox {
+        id: bannerBox
+        property var banner: null
+        property bool alert: false
+        visible: banner !== null && (banner?.text ?? "") !== ""
+        Layout.fillWidth: true
+        materialIcon: alert ? "event_busy" : "sell"
+        text: banner?.text ?? ""
+        color: (banner?.color ?? "") !== "" ? banner.color : alert ? Appearance.colors.colErrorContainer : Appearance.colors.colPrimaryContainer
+
+        StyledButton {
+            visible: (bannerBox.banner?.url ?? "") !== ""
+            text: (bannerBox.banner?.buttonText ?? "") !== "" ? bannerBox.banner.buttonText : Translation.tr("Open")
+            colBackgroundUnchecked: (bannerBox.banner?.buttonColor ?? "") !== "" ? bannerBox.banner.buttonColor : Appearance.colors.colLayer2
+            onClicked: Vpn.openProviderLink(bannerBox.banner.url)
         }
     }
 

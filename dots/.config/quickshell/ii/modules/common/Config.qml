@@ -692,10 +692,13 @@ Singleton {
                 // The old custom_rules.json (and subscription URL) was read
                 // into the routing below / the overlay (services/Vpn.qml)
                 property bool migrated: false
+                // Send a device id (x-hwid) with the subscription request:
+                // some providers limit devices by it
+                property bool sendHwid: false
                 // Split routing, put in force by "Apply" (VPN details >
                 // Routing; restarts sing-box). Syntax: scripts/vpn/routing.py
                 property JsonObject routing: JsonObject {
-                    property string defaultRoute: "proxy" // Unmatched traffic: "proxy" | "direct"
+                    property string defaultRoute: "proxy" // Unmatched traffic: "proxy" | "direct" | "provider"
                     // First match wins: { action: "proxy" | "direct" | "block", match: ["geoip:ru",
                     // "geosite:youtube", "domain:example.com", "process:steam", ...], enabled: true }
                     property list<var> rules: []
@@ -703,6 +706,10 @@ Singleton {
                     property string remoteDns: "8.8.8.8" // DoH server, queried through the proxy
                     property int hysteria2UpMbps: 0 // 0 = what the subscription says
                     property int hysteria2DownMbps: 0
+                    // What the subscription's provider sends, merged in by itself
+                    property bool useProviderRules: true // Its rules, after yours
+                    property bool useProviderDns: true // Its DNS servers / hosts / FakeDNS
+                    property bool useProviderFragment: true // TLS fragmentation, if it asks
                 }
             }
 

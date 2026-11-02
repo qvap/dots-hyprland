@@ -34,6 +34,20 @@
 # DoH server queried through the proxy. hysteria2*Mbps (> 0): the speeds told
 # to Hysteria2 nodes (Brutal congestion control), over the subscription's.
 #
+# final "provider" = the provider's GlobalProxy (proxy without one).
+#
+# The provider's part ("provider", sub_meta.py's `routing`, refreshed with
+# the subscription): { name, final, rules: [{ action, match }], dns: {
+# remote / domestic: { type: "https" | "udp", server, path, tlsName },
+# hosts: { domain: [ip] } }, fakeip, sort: "none" | "name" | "ping",
+# fragment }. Merged in by itself, each part switched by the user's
+# useProviderRules / useProviderDns / useProviderFragment (default on):
+# its rules after the user's (the user's win), matchers or lists that
+# cannot be had dropped instead of failing; its DNS servers replace
+# dns-remote / dns-direct (over remoteDns), its hosts answer first, its
+# FakeDNS turns FakeIP on; fragment = TLS ClientHello fragmentation on
+# every TLS node; sort "name" orders the node list ("ping": as given).
+#
 # Overlay (the user's own sing-box JSON, applied last, wins over everything):
 # objects merge recursively, `null` deletes a key, arrays of tagged objects
 # (outbounds, endpoints, inbounds, dns.servers, route.rule_set) merge by tag
@@ -44,15 +58,21 @@
 #
 #   routing.py check <routing.json> [overlay.json]       exit 1 + message
 #   routing.py rulesets <routing.json>                   "file<TAB>url..." lines
+#                                (file "?name": only the provider's rules
+#                                need it, a failed download is no error)
 #   routing.py compose <base.json> <routing.json> <overlay.json> <rules dir> <out>
 #   routing.py migrate <custom_rules.json>   the old rules file -> one JSON line
 #                                            { routing, overlay } (see migrate())
+#   routing.py install-rules <routing.json> <user dir> <rules dir> <uid>
+#                                (root) the rule-sets the routing needs from
+#                                the user's downloads, others removed
 # Missing routing / overlay files = none (everything through the proxy).
 
 import ipaddress
 import json
 import os
 import re
+import stat
 import sys
 
 SOURCES = {
@@ -80,6 +100,7 @@ FIELDS = {
 DNS_FIELDS = ("domain_suffix", "domain", "domain_keyword", "domain_regex")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._!-]*$")
 HOST_RE = re.compile(r"^[A-Za-z0-9.:\[\]-]+$")
+PATH_RE = re.compile(r"^/[A-Za-z0-9._~/-]*$")
 SPOTIFY = ["scdn.co", "spotify.com", "spotifycdn.com"]
 PREFIX = "ii-"
 
@@ -138,12 +159,75 @@ def parse(m):
     return kind, value, source
 
 
+def flag(routing, key):
+    v = routing.get(key, True)
+    if not isinstance(v, bool):
+        raise Bad("%s: true | false" % key)
+    return v
+
+
+def provider_of(routing):
+    """The provider's part, validated; what is malformed is left out (it
+    comes from the provider, not the user: no reason to fail the apply)."""
+    p = routing.get("provider")
+    if p is None:
+        return {}
+    if not isinstance(p, dict):
+        raise Bad("provider: not an object")
+    out = {}
+    if p.get("final") in ("proxy", "direct"):
+        out["final"] = p["final"]
+    rules = []
+    for r in p["rules"] if isinstance(p.get("rules"), list) else []:
+        if not isinstance(r, dict) or r.get("action") not in ACTIONS:
+            continue
+        match = []
+        for m in r["match"] if isinstance(r.get("match"), list) else []:
+            try:
+                match.append(parse(m))
+            except Bad:
+                pass
+        if match:
+            rules.append((r["action"], match))
+    out["rules"] = rules
+    dns = p.get("dns") if isinstance(p.get("dns"), dict) else {}
+    for k in ("remote", "domestic"):
+        s = dns.get(k)
+        if not isinstance(s, dict) or s.get("type") not in ("https", "udp"):
+            continue
+        server = s.get("server")
+        if not isinstance(server, str) or not (is_ip(server) and "/" not in server or HOST_RE.match(server)):
+            continue
+        d = {"type": s["type"], "server": server}
+        path = s.get("path")
+        if s["type"] == "https":
+            d["path"] = path if isinstance(path, str) and PATH_RE.match(path) else "/dns-query"
+            name = s.get("tlsName")
+            if isinstance(name, str) and HOST_RE.match(name) and not is_ip(name):
+                d["tlsName"] = name
+        out.setdefault("dns", {})[k] = d
+    hosts = {}
+    if isinstance(dns.get("hosts"), dict):
+        for d, ips in dns["hosts"].items():
+            ips = [i for i in ips if isinstance(i, str) and is_ip(i) and "/" not in i] if isinstance(ips, list) else []
+            if isinstance(d, str) and HOST_RE.match(d) and ips:
+                hosts[d] = ips
+    if hosts:
+        out.setdefault("dns", {})["hosts"] = hosts
+    out["fakeip"] = p.get("fakeip") is True
+    out["fragment"] = p.get("fragment") is True
+    out["sort"] = p.get("sort") if p.get("sort") in ("none", "name", "ping") else "none"
+    return out
+
+
 def rules_of(routing):
+    """(final, [(action, matchers, raw, optional)]): the user's rules, then
+    the provider's (optional: their rule-sets may be missing)."""
     if not isinstance(routing, dict):
         raise Bad("routing: not an object")
     final = routing.get("final", "proxy")
-    if final not in ("proxy", "direct"):
-        raise Bad("routing.final: proxy | direct")
+    if final not in ("proxy", "direct", "provider"):
+        raise Bad("routing.final: proxy | direct | provider")
     dns = routing.get("remoteDns") or ""
     if not isinstance(dns, str) or dns and not HOST_RE.match(dns):
         raise Bad("remoteDns: a host name or address")
@@ -151,6 +235,11 @@ def rules_of(routing):
         v = routing.get(k, 0)
         if not isinstance(v, int) or isinstance(v, bool) or v < 0:
             raise Bad("%s: a whole number >= 0" % k)
+    for k in ("useProviderRules", "useProviderDns", "useProviderFragment"):
+        flag(routing, k)
+    provider = provider_of(routing)
+    if final == "provider":
+        final = provider.get("final", "proxy")
     out = []
     for i, r in enumerate(routing.get("rules") or []):
         if not isinstance(r, dict) or r.get("action") not in ACTIONS:
@@ -163,12 +252,14 @@ def rules_of(routing):
                 raise Bad("rule %d: needs match or sing-box rule fields" % (i + 1))
             if "outbound" in raw:
                 raise Bad("rule %d: the outbound is set by action" % (i + 1))
-            out.append((r["action"], [], raw))
+            out.append((r["action"], [], raw, False))
             continue
         match = r.get("match") or []
         if isinstance(match, str):
             match = [match]
-        out.append((r["action"], [parse(m) for m in match], None))
+        out.append((r["action"], [parse(m) for m in match], None, False))
+    if flag(routing, "useProviderRules"):
+        out += [(action, match, None, True) for action, match in provider.get("rules", [])]
     return final, out
 
 
@@ -177,18 +268,20 @@ def ruleset_file(kind, name, source):
 
 
 def rulesets(routing):
-    """Unique (file, [urls]) the routing needs, in rule order."""
-    seen, out = set(), []
-    for _, matchers, _ in rules_of(routing)[1]:
+    """Unique (file, [urls], optional) the routing needs, in rule order;
+    optional = only provider rules need it."""
+    order, need = [], {}
+    for _, matchers, _, optional in rules_of(routing)[1]:
         for kind, value, source in matchers:
             if kind not in ("geosite", "geoip"):
                 continue
             f = ruleset_file(kind, value, source)
-            if f in seen:
-                continue
-            seen.add(f)
-            out.append((f, [SOURCES[s][kind].format(value) for s in ((source,) if source else SOURCE_ORDER)]))
-    return out
+            if f not in need:
+                order.append(f)
+                need[f] = ([SOURCES[s][kind].format(value) for s in ((source,) if source else SOURCE_ORDER)], optional)
+            elif not optional:
+                need[f] = (need[f][0], False)
+    return [(f, need[f][0], need[f][1]) for f in order]
 
 
 def compose_routing(cfg, routing, rules_dir):
@@ -206,7 +299,7 @@ def compose_routing(cfg, routing, rules_dir):
     rrules.append({"ip_is_private": True, "outbound": "direct"})
     files = set()
     gen_dns = []
-    for i, (action, matchers, raw) in enumerate(rules):
+    for i, (action, matchers, raw, optional) in enumerate(rules):
         if raw is not None:
             rrules.append(dict(raw, **target[action]))
             continue
@@ -220,6 +313,8 @@ def compose_routing(cfg, routing, rules_dir):
                 if f not in files:
                     path = os.path.join(rules_dir, f)
                     if not os.path.exists(path):
+                        if optional:
+                            continue  # a provider's list no source has
                         raise Bad("%s:%s is not downloaded" % (kind, value))
                     files.add(f)
                     sets.append({"type": "local", "tag": tag, "format": "binary", "path": path})
@@ -250,7 +345,19 @@ def compose_routing(cfg, routing, rules_dir):
     for s in dns.get("servers", []):
         if s.get("tag") == "dns-remote" and routing.get("remoteDns"):
             s["server"] = routing["remoteDns"]
-    if routing.get("fakeip"):
+    provider = provider_of(routing)
+    pdns = provider.get("dns", {}) if flag(routing, "useProviderDns") else {}
+    compose_provider_dns(dns, pdns, gen_dns)
+    if flag(routing, "useProviderFragment") and provider.get("fragment"):
+        for o in cfg.get("outbounds", []):
+            tls = o.get("tls")
+            if isinstance(tls, dict) and tls.get("enabled"):
+                tls["fragment"] = True
+    if provider.get("sort") == "name":
+        for o in cfg.get("outbounds", []):
+            if o.get("type") == "selector" and o.get("tag") == proxy:
+                o["outbounds"] = sorted(o.get("outbounds", []), key=natural)
+    if routing.get("fakeip") or flag(routing, "useProviderDns") and provider.get("fakeip"):
         dns.setdefault("servers", []).append({"tag": "dns-fakeip", "type": "fakeip",
                                               "inet4_range": "198.18.0.0/15",
                                               "inet6_range": "fc00::/18"})
@@ -277,6 +384,92 @@ def compose_routing(cfg, routing, rules_dir):
     drules[catch:catch] = gen_dns
     if not sets:
         route.pop("rule_set")
+
+
+def natural(tag):
+    """Names with numbers in number order ("Node 2" before "Node 10")."""
+    return [(0, int(t), "") if t.isdigit() else (1, 0, t.casefold()) for t in re.split(r"(\d+)", tag) if t]
+
+
+def compose_provider_dns(dns, pdns, gen_dns):
+    """The provider's DNS servers in place of dns-remote / dns-direct (same
+    tags: every rule naming them follows), its hosts answered first."""
+    servers = dns.setdefault("servers", [])
+    for key, tag in (("remote", "dns-remote"), ("domestic", "dns-direct")):
+        p = pdns.get(key)
+        if not p:
+            continue
+        j = next((i for i, s in enumerate(servers) if s.get("tag") == tag), None)
+        old = servers[j] if j is not None else {}
+        s = {"tag": tag, "type": p["type"], "server": p["server"]}
+        if p["type"] == "https":
+            s["path"] = p["path"]
+            if p.get("tlsName"):
+                s["tls"] = {"enabled": True, "server_name": p["tlsName"]}
+        if "detour" in old:
+            s["detour"] = old["detour"]
+        if not is_ip(p["server"]):
+            # A name to resolve first: dns-remote's own way, else the system's.
+            s["domain_resolver"] = old.get("domain_resolver") or "dns-local"
+        if j is None:
+            servers.append(s)
+        else:
+            servers[j] = s
+    if pdns.get("hosts"):
+        servers.append({"tag": "ii-hosts", "type": "hosts", "predefined": pdns["hosts"]})
+        gen_dns.insert(0, {"action": "route", "domain": sorted(pdns["hosts"]), "server": "ii-hosts"})
+
+
+def install_rules(routing, src, dst, uid):
+    """Root: copy the .srs files `routing` needs from user `uid`'s download
+    dir `src` to `dst`. `src` and its files are opened without following a
+    final symlink and must be owned by `uid` (a password-free caller picks
+    `src`: no root-only file may come out of it). A file that fails the
+    checks is skipped: an older copy in `dst` stays, compose reports a
+    missing one. Nothing is dropped here: a rollback to the previous config
+    still needs its rule-sets (prune_rules, once the new one is up)."""
+    need = [f for f, _, _ in rulesets(routing)]
+    os.makedirs(dst, mode=0o755, exist_ok=True)
+    dfd = None
+    if src and uid >= 0:
+        try:
+            dfd = os.open(src, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            if os.fstat(dfd).st_uid != uid:
+                os.close(dfd)
+                dfd = None
+        except OSError:
+            dfd = None
+    for f in need:
+        if dfd is None:
+            break
+        try:
+            fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dfd)
+        except OSError:
+            continue
+        with os.fdopen(fd, "rb") as src_f:
+            st = os.fstat(src_f.fileno())
+            if not (stat.S_ISREG(st.st_mode) and st.st_uid == uid and st.st_size < 64 << 20):
+                continue
+            data = src_f.read()
+        if not data.startswith(b"SRS"):
+            continue
+        tmp = os.path.join(dst, "." + f + ".tmp")
+        with open(tmp, "wb") as out:
+            out.write(data)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, os.path.join(dst, f))
+    if dfd is not None:
+        os.close(dfd)
+
+
+def prune_rules(routing, dst):
+    """Root: drop the .srs files in `dst` that `routing` does not need."""
+    need = [f for f, _, _ in rulesets(routing)]
+    if not os.path.isdir(dst):
+        return
+    for f in os.listdir(dst):
+        if f.endswith(".srs") and f not in need:
+            os.remove(os.path.join(dst, f))
 
 
 TAGGED = {("outbounds",), ("endpoints",), ("inbounds",), ("dns", "servers"), ("route", "rule_set")}
@@ -467,8 +660,12 @@ def main():
         elif a[:1] == ["migrate"] and len(a) == 2:
             print(json.dumps(migrate(load(a[1], {})), ensure_ascii=False))
         elif a[:1] == ["rulesets"] and len(a) == 2:
-            for f, urls in rulesets(load(a[1], {})):
-                print("\t".join([f] + urls))
+            for f, urls, optional in rulesets(load(a[1], {})):
+                print("\t".join([("?" if optional else "") + f] + urls))
+        elif a[:1] == ["install-rules"] and len(a) == 5:
+            install_rules(load(a[1], {}), a[2], a[3], int(a[4]) if a[4].lstrip("-").isdigit() else -1)
+        elif a[:1] == ["prune-rules"] and len(a) == 3:
+            prune_rules(load(a[1], {}), a[2])
         elif a[:1] == ["compose"] and len(a) == 6:
             cfg = load(a[1], None)
             if not isinstance(cfg, dict):

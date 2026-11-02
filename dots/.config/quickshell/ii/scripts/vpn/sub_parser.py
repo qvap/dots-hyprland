@@ -10,7 +10,8 @@
 # routing.py (virtualprivatenetwork.sh), so a settings change does not need
 # the subscription again.
 # extras_path: link parameters sing-box has no field for but Xray does
-# (REALITY spiderX, gRPC authority / multi mode, XHTTP), JSON { tag: { ... } }
+# (REALITY spiderX, gRPC authority / multi mode, XHTTP extra, VLESS
+# Encryption), JSON { tag: { ... } } —
 # for xray_split.py, which moves such nodes to Xray.
 
 import base64
@@ -22,11 +23,13 @@ import urllib.parse
 # ---------------------------------------------------------------------------
 # Collected nodes
 # ---------------------------------------------------------------------------
-OUTBOUNDS = []
-ENDPOINTS = []
-ORDER_TAGS = []
-_USED_TAGS = set()
-EXTRAS = {}  # tag -> Xray-only link parameters (see the header)
+OUTBOUNDS = []     # proxy outbounds (everything except wireguard)
+ENDPOINTS = []     # wireguard endpoints (sing-box >= 1.11)
+ORDER_TAGS = []    # tags in subscription order (proxies + endpoints mixed)
+# build_config's own outbounds: a node named so would duplicate the tag.
+RESERVED_TAGS = ("proxy", "direct")
+_USED_TAGS = set(RESERVED_TAGS)
+EXTRAS = {}        # tag -> Xray-only link parameters (see the header)
 # The TUN's name: the kill switch (virtualprivatenetwork.sh) lets it through.
 TUN_NAME = "ii-tun"
 
@@ -47,7 +50,7 @@ UTLS_FP = {
 def _uniq_tag(tag):
     tag = (tag or "").strip()
     if not tag:
-        tag = "proxy"
+        tag = "node"
     base = tag
     i = 1
     while tag in _USED_TAGS:
@@ -75,6 +78,22 @@ def remember_extras(tag, q):
         e["authority"] = q["authority"]
     if q.get("mode", "").lower() == "multi" and q.get("type", "").lower() == "grpc":
         e["multiMode"] = True
+    if q.get("type", "").lower() in ("xhttp", "splithttp") and q.get("extra"):
+        # xhttpSettings.extra (padding, xmux, downloadSettings, header
+        # placement...): the server may insist on its non-default values.
+        try:
+            x = json.loads(q["extra"])
+            if isinstance(x, dict) and x:
+                e["xhttpExtra"] = x
+        except ValueError:
+            pass
+    enc = q.get("encryption", "")
+    if enc and enc.lower() != "none":
+        # VLESS Encryption (mlkem768x25519plus...): Xray only. With it Vision
+        # runs over any transport, so the flow sing-box was not given rides along.
+        e["encryption"] = enc
+        if q.get("flow"):
+            e["flow"] = q["flow"]
     if e:
         EXTRAS[tag] = e
 
@@ -260,8 +279,10 @@ def build_transport(net, q, host_header=""):
             t["host"] = host
         return t
     if net in ("xhttp", "splithttp"):
-        # XHTTP (xray-core's `splithttp`) has no sing-box transport: such a
-        # node is moved to Xray by xray_split.py, which reads this.
+        # XHTTP (formerly `splithttp`): Xray only, sing-box has no such
+        # transport — xray_split.py moves the node to Xray, or drops it
+        # without one. Query keys follow the xray spec:
+        #   path, host, mode (auto | packet-up | stream-up | stream-one).
         t = {"type": "xhttp"}
         if path and path != "/":
             t["path"] = path
@@ -765,23 +786,39 @@ def parse_share_link(line):
 # ---------------------------------------------------------------------------
 # sing-box JSON node ingestion
 # ---------------------------------------------------------------------------
+# No tor: it runs a binary (executable_path) with its own arguments.
 VALID_NODE_TYPES = {
-    "socks",
-    "http",
-    "shadowsocks",
-    "vmess",
-    "vless",
-    "trojan",
-    "anytls",
-    "hysteria",
-    "hysteria2",
-    "tuic",
-    "wireguard",
-    "ssh",
-    "shadowtls",
-    "naive",
-    "tor",
+    "socks", "http", "shadowsocks", "vmess", "vless", "trojan",
+    "anytls", "hysteria", "hysteria2", "tuic", "wireguard", "ssh",
+    "shadowtls", "naive",
 }
+
+# A sing-box JSON node is the provider's text, and sing-box acts on it as
+# its own user (CAP_NET_ADMIN, may read any file). What a node needs is the
+# server's side; fields naming local things are dropped at any depth:
+# files (*_path / *_directory: ssh private_key_path, TLS certificate / key
+# / ECH config paths...), the dial fields (interface, address, mark, netns,
+# network strategy: this machine's business), and references to other tags
+# (detour / domain_resolver: tags here are renamed, and a missing one fails
+# the whole config).
+LOCAL_KEYS = {
+    "detour", "bind_interface", "inet4_bind_address", "inet6_bind_address",
+    "bind_address_no_port", "routing_mark", "reuse_addr", "netns",
+    "domain_resolver", "domain_strategy", "network_strategy", "network_type",
+    "fallback_network_type", "fallback_delay",
+}
+# A WireGuard endpoint's local side: an interface it would create (a name
+# could take the TUN's or a real one's), a port it would listen on.
+WG_LOCAL_KEYS = {"name", "system", "listen_port", "interface_name", "system_interface"}
+
+
+def _scrub(v):
+    if isinstance(v, dict):
+        return {k: _scrub(x) for k, x in v.items()
+                if not (k in LOCAL_KEYS or str(k).endswith(("_path", "_directory")))}
+    if isinstance(v, list):
+        return [_scrub(x) for x in v]
+    return v
 
 
 def _wg_outbound_to_endpoint(out):
@@ -820,9 +857,11 @@ def parse_singbox_node(out):
     t = out.get("type")
     if t not in VALID_NODE_TYPES:
         return
-    node = dict(out)
-    node.pop("domain_strategy", None)
+    node = _scrub(out)
     if t == "wireguard":
+        for k in WG_LOCAL_KEYS:
+            node.pop(k, None)
+        # legacy outbound vs already-endpoint
         if "peers" in node or "address" in node and "server" not in node:
             node["type"] = "wireguard"
             add_endpoint(node)
@@ -1004,6 +1043,29 @@ def parse_xray_vless(out, remarks=""):
     if tr:
         ob["transport"] = tr
     add_outbound(ob)
+    remember_extras(ob["tag"], _xray_link_params(stream, user, network))
+
+
+def _xray_link_params(stream, user, network):
+    """An Xray JSON node's Xray-only settings as share-link parameters, for
+    remember_extras (xray_split.py moves such nodes to Xray)."""
+    q = {"type": network}
+    reality = stream.get("realitySettings") or {}
+    if reality.get("spiderX"):
+        q["spx"] = reality["spiderX"]
+    grpc = stream.get("grpcSettings") or {}
+    if grpc.get("authority"):
+        q["authority"] = grpc["authority"]
+    if grpc.get("multiMode"):
+        q["mode"] = "multi"
+    xh = stream.get("xhttpSettings") or stream.get("splithttpSettings") or {}
+    if isinstance(xh.get("extra"), dict):
+        q["extra"] = json.dumps(xh["extra"])
+    if isinstance(user.get("encryption"), str):
+        q["encryption"] = user["encryption"]
+    if user.get("flow"):
+        q["flow"] = user["flow"]
+    return q
 
 
 def parse_xray_outbound(out, remarks=""):
@@ -1377,11 +1439,17 @@ def update_clash(text):
 
 
 def _clash_proxies_fallback(text):
+    """Tolerant parser for the `proxies:` list when PyYAML is unavailable.
+    Handles inline flow maps `- {a: b}`, block maps with nested mappings
+    (e.g. ws-opts / headers / reality-opts) and block lists inside a proxy
+    (`alpn:` + `- h2` lines, indented or not) via an indentation stack.
+    Stack entries: (child indent, container, parent, key, key indent) —
+    parent[key] is the container, so an empty one can turn into a list."""
     lines = text.splitlines()
     out = []
     in_proxies = False
-    cur = None
-    item_indent = None
+    cur = None            # current proxy dict
+    item_indent = None    # indent of the proxy's `- ` marker
     stack = []
 
     def flush():
@@ -1402,21 +1470,26 @@ def _clash_proxies_fallback(text):
         if indent == 0 and not stripped.startswith("-") and stripped.endswith(":"):
             break
 
-        if stripped.startswith("- "):
+        if stripped == "-" or stripped.startswith("- "):
+            item = stripped[1:].strip()
+            # Deeper than the proxy's own marker: a list inside the proxy.
+            if item_indent is not None and indent > item_indent:
+                if cur is not None:
+                    _seq_item(stack, indent, item, raw)
+                continue
             flush()
-            item = stripped[2:].strip()
+            item_indent = indent
             if item.startswith("{"):
                 out.append(_parse_flow_map(item))
                 cur = None
                 stack = []
-                item_indent = None
                 continue
             cur = {}
-            item_indent = indent
-            stack = [(indent + 2, cur)]
+            col = _item_col(raw, indent)
+            stack = [(col, cur, None, None, indent)]
             k, sep, v = item.partition(":")
             if sep:
-                _assign(stack, indent + 2, k.strip(), v.strip())
+                _assign(stack, col, k.strip(), v.strip())
             continue
 
         if cur is None:
@@ -1430,15 +1503,50 @@ def _clash_proxies_fallback(text):
     return out
 
 
+def _item_col(raw, indent):
+    """Column of what follows a `- ` marker at `indent`."""
+    rest = raw[indent + 1:]
+    return indent + 1 + len(rest) - len(rest.lstrip(" "))
+
+
+def _seq_item(stack, indent, item, raw):
+    # The list belongs to the innermost key opened at or left of this `-`
+    # (`alpn:` + `  - h2`, or YAML's indentless `alpn:` + `- h2`).
+    while len(stack) > 1 and stack[-1][4] > indent:
+        stack.pop()
+    child_indent, seq, parent, key, key_indent = stack[-1]
+    if parent is None:
+        return  # a `-` straight inside a proxy or a list item: not YAML
+    if isinstance(seq, dict):
+        if seq:
+            return  # already a mapping
+        seq = parent[key] = []
+        stack[-1] = (child_indent, seq, parent, key, key_indent)
+    if item.startswith("{"):
+        seq.append(_parse_flow_map(item))
+    elif re.match(r"^[^\s:'\"]+\s*:(\s|$)", item):
+        # `- k: v`: a mapping item, its further keys below at its column.
+        d = {}
+        seq.append(d)
+        col = _item_col(raw, indent)
+        stack.append((col, d, None, None, indent + 1))
+        k, _, v = item.partition(":")
+        _assign(stack, col, k.strip(), v.strip())
+    elif item:
+        seq.append(_yaml_scalar(item))
+
+
 def _assign(stack, indent, key, value):
-    container = stack[-1][1]
-    for ind, cont in stack:
-        if indent >= ind:
+    # Find the mapping whose child-indent matches this line's indent.
+    container = stack[0][1]
+    for ind, cont, *_ in stack:
+        if indent >= ind and isinstance(cont, dict):
             container = cont
     if value == "":
+        # Opens a nested mapping (or a list: _seq_item turns it into one).
         child = {}
         container[key] = child
-        stack.append((indent + 2, child))
+        stack.append((indent + 2, child, container, key, indent))
     else:
         container[key] = _yaml_scalar(value)
 
