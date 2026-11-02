@@ -306,7 +306,7 @@ Singleton {
                         property real z: 0
                         property string sizeMode: "2x2"
                         property bool vertical: false
-                        property int clockCount: 4 
+                        property int clockCount: 4
                     }
 
                     property JsonObject sun: JsonObject {
@@ -340,7 +340,7 @@ Singleton {
                         property real x: 400
                         property real y: 100
                         property real z: 0
-                        property string sizeMode: "1x2" 
+                        property string sizeMode: "1x2"
                     }
 
                     property JsonObject images: JsonObject {
@@ -390,7 +390,7 @@ Singleton {
 
                     property JsonObject sticker: JsonObject {
                         property bool enable: false
-                        property list<var> items: [] // if someone sees this and wants to add more stickers, make a PR too lazy 
+                        property list<var> items: [] // if someone sees this and wants to add more stickers, make a PR too lazy
                         property string placementStrategy: "free"
                         property real x: 400
                         property real y: 100
@@ -430,7 +430,7 @@ Singleton {
                         property real x: 800
                         property real y: 500
                         property real z: 0
-                        property string sizeMode: "1x3" 
+                        property string sizeMode: "1x3"
                     }
 
                     property JsonObject customText: JsonObject {
@@ -616,7 +616,7 @@ Singleton {
                 property bool pinnedOnStartup: false
                 property bool hoverToReveal: true // When false, only reveals on empty workspace
                 property bool magnify: true // Icons near the cursor grow, like on macOS
-                property real magnifyScale: 1.6 // Size of the icon under the cursor
+                property real magnifyScale: 1.2 // Size of the icon under the cursor
                 property list<string> pinnedApps: [ // IDs of pinned entries
                     "org.kde.dolphin", "kitty",]
                 property list<string> ignoredAppRegexes: []
