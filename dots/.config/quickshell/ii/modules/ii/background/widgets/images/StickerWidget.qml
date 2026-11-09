@@ -66,12 +66,11 @@ AbstractBackgroundWidget {
             animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
         }
 
-        StyledImage {
+        WidgetMedia {
             id: stickerImage
             anchors.fill: parent
             source: root.imagePath !== "" ? root.imagePath : ""
             fillMode: Image.PreserveAspectFit
-            cache: false
             antialiasing: true
             sourceSize.width: parent.width * 2
             sourceSize.height: parent.height * 2
@@ -115,7 +114,7 @@ AbstractBackgroundWidget {
                 if (drop.hasUrls && drop.urls.length > 0) {
                     var cleanPath = drop.urls[0].toString().replace(/^file:\/\//, "")
                     var ext = cleanPath.split(".").pop().toLowerCase()
-                    var accepted = ["png", "svg", "webp", "gif"] 
+                    var accepted = ["png", "svg", "webp", "gif", "mp4"]
                     if (accepted.indexOf(ext) !== -1) {
                         root.setEntry({ path: cleanPath })
                     }

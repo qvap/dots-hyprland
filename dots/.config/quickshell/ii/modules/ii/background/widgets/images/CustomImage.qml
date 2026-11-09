@@ -121,11 +121,10 @@ AbstractBackgroundWidget {
                 visible: !root.useShape
             }
 
-            StyledImage {
+            WidgetMedia {
                 anchors.fill: parent
                 source: root.imagePath !== "" ? root.imagePath : ""
                 fillMode: Image.PreserveAspectCrop
-                cache: false
                 antialiasing: true
                 sourceSize.width: parent.width
                 sourceSize.height: parent.height
@@ -159,7 +158,7 @@ AbstractBackgroundWidget {
                     if (drop.hasUrls && drop.urls.length > 0) {
                         var cleanPath = drop.urls[0].toString().replace(/^file:\/\//, "")
                         var ext = cleanPath.split(".").pop().toLowerCase()
-                        var accepted = ["png","jpg","jpeg","webp","avif","bmp","gif","tiff","tif"]
+                        var accepted = ["png","jpg","jpeg","webp","avif","bmp","gif","tiff","tif","mp4"]
                         if (accepted.indexOf(ext) !== -1) {
                             root.setEntry({ path: cleanPath })
                         }

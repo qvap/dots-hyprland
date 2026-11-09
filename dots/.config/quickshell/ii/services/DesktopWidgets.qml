@@ -75,7 +75,7 @@ Singleton {
 
     Process {
         id: imagePicker
-        command: ["kdialog", "--getopenfilename", Quickshell.env("HOME") + "/Pictures", "image/png image/jpeg image/webp image/gif image/avif image/bmp image/tiff image/svg+xml"]
+        command: ["kdialog", "--getopenfilename", Quickshell.env("HOME") + "/Pictures", "image/png image/jpeg image/webp image/gif image/avif image/bmp image/tiff image/svg+xml video/mp4"]
         stdout: StdioCollector { id: imagePickerOutput }
         onExited: code => {
             const path = imagePickerOutput.text.trim();

@@ -66,7 +66,7 @@ AbstractBackgroundWidget {
         if (drop.hasUrls && drop.urls.length > 0) {
             var cleanPath = drop.urls[0].toString().replace(/^file:\/\//, "")
             var ext = cleanPath.split(".").pop().toLowerCase()
-            var accepted = ["png", "jpg", "jpeg", "webp", "avif", "bmp", "gif", "tiff", "tif"]
+            var accepted = ["png", "jpg", "jpeg", "webp", "avif", "bmp", "gif", "tiff", "tif", "mp4"]
             if (accepted.indexOf(ext) !== -1) root.setEntry({ path: cleanPath })
         }
         root.dropHover = false
@@ -85,7 +85,7 @@ AbstractBackgroundWidget {
 
     Image {
         id: probe
-        source: root.imagePath
+        source: imageMedia.isVideo ? "" : root.imagePath
         visible: false
         asynchronous: true
         cache: false
@@ -107,12 +107,12 @@ AbstractBackgroundWidget {
             radius: card.radius
             color: "transparent"
 
-            StyledImage {
+            WidgetMedia {
+                id: imageMedia
                 anchors.fill: parent
                 source: root.imagePath
                 visible: root.imagePath !== ""
                 fillMode: Image.PreserveAspectCrop
-                cache: false
                 antialiasing: true
                 smooth: true
                 mipmap: true
