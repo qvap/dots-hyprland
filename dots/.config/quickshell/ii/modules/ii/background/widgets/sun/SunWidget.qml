@@ -97,11 +97,12 @@ AbstractBackgroundWidget {
                     const rise = root.msOfDay(root.sunrise), set = root.msOfDay(root.sunset)
                     const noon = (rise + set) / 2
                     const c = Math.cos(Math.PI * (set - rise) / root.dayMs)
-                    const pad = 8, h = height - pad * 2
+                    // Keep the current-time marker's 13px halo inside the canvas.
+                    const pad = 14, h = height - pad * 2
                     // cosine shifted so it crosses zero exactly at sunrise/sunset
                     const yAt = t => pad + (1 - (Math.cos(2 * Math.PI * (t - noon) / root.dayMs) + 1) / 2) * h
                     const horizon = yAt(rise)
-                    const xAt = t => t / root.dayMs * width
+                    const xAt = t => pad + t / root.dayMs * (width - pad * 2)
 
                     ctx.lineWidth = 5
                     ctx.lineCap = "round"
@@ -113,7 +114,7 @@ AbstractBackgroundWidget {
                         ctx.strokeStyle = Qt.alpha(fg, above ? 0.45 : 0.15)
                         ctx.beginPath()
                         for (let x = 0; x <= width; x += 2) {
-                            const y = yAt(x / width * root.dayMs)
+                            const y = yAt((x - pad) / (width - pad * 2) * root.dayMs)
                             x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
                         }
                         ctx.stroke()
