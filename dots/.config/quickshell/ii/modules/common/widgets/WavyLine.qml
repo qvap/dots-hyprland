@@ -10,6 +10,10 @@ Canvas {
     property real fullLength: width
 
     onPaint: {
+        // Qt can discard the drawing commands when the canvas rounds to zero pixels.
+        if (width < 1 || height < 1)
+            return;
+
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
 
